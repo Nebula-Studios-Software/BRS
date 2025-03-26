@@ -29,9 +29,16 @@
 			{
 				"from": "dist",
 				"to": "app.asar.unpacked/dist",
-				"filter": ["**/*"]
+				"filter": [
+					"**/*"
+				]
 			}
 		],
+		 "publish": [{
+			"provider": "github",
+			"owner": "Nebula-Studios-Software",
+			"repo": "BRS"
+		}],
 		"win": {
 			"target": "nsis",
 			"icon": "src/app/icon.ico"
@@ -62,6 +69,7 @@
 		"clsx": "^2.1.1",
 		"electron-squirrel-startup": "^1.0.1",
 		"electron-store": "^8.2.0",
+		"electron-updater": "^6.3.9",
 		"framer-motion": "^12.6.0",
 		"fs": "^0.0.1-security",
 		"lucide-react": "^0.321.0",

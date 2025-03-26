@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron/main')
 const path = require('path')
 const fs = require('fs')
+const { UpdateManager } = require('./src/lib/updater');
 
 // Determina se siamo in modalità sviluppo
 const isDev = process.env.NODE_ENV === 'development'
@@ -64,6 +65,9 @@ const createWindow = () => {
     // Carica il file temporaneo
     mainWindow.loadFile(tempPath)
   }
+
+  // Inizializza l'update manager
+  new UpdateManager(mainWindow);
 
   // Handle IPC events
   ipcMain.on('process:output', (event, line) => {

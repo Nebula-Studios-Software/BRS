@@ -346,6 +346,18 @@ contextBridge.exposeInMainWorld('electron', {
         });
       }
     });
+  },
+
+  updates: {
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    onUpdateAvailable: (callback) => ipcRenderer.on('update-available', callback),
+    onUpdateProgress: (callback) => ipcRenderer.on('update-progress', callback),
+    onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', callback),
+    removeUpdateListeners: () => {
+        ipcRenderer.removeAllListeners('update-available')
+        ipcRenderer.removeAllListeners('update-progress')
+        ipcRenderer.removeAllListeners('update-downloaded')
+    }
   }
 });
 
