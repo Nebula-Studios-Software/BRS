@@ -1,5 +1,7 @@
+// Importo i moduli necessari all'inizio del file, assicurandomi che vengano caricati correttamente
 const { contextBridge, ipcRenderer } = require('electron')
-const { execFile, exec } = require('child_process')
+const childProcess = require('child_process')
+const { execFile, exec } = childProcess
 const os = require('os')
 const path = require('path')
 const fs = require('fs')

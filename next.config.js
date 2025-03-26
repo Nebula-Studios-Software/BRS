@@ -4,7 +4,10 @@ const nextConfig = {
     unoptimized: true,
   },
   output: 'export',
-  distDir: 'out',
+  distDir: 'dist',
+  assetPrefix: './',
+  basePath: '',
+  trailingSlash: true,
 }
 
 module.exports = nextConfig

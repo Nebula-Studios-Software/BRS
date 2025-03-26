@@ -59,7 +59,7 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] bg-surface p-6 rounded-lg border border-border shadow-lg animate-enter">
+        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] bg-surface p-6 rounded-lg border border-border shadow-lg">
           <Dialog.Title className="text-lg font-semibold mb-4 text-text-primary">
             Manage Presets
           </Dialog.Title>

@@ -3,9 +3,7 @@ const path = require('path')
 const fs = require('fs')
 
 // Determina se siamo in modalità sviluppo
-// Verifica se esiste la cartella di build o se è stato esplicitamente impostato NODE_ENV
-const isDev = !fs.existsSync(path.join(__dirname, 'dist', 'index.html')) || 
-              process.env.NODE_ENV === 'development'
+const isDev = process.env.NODE_ENV === 'development'
 
 // Handle Squirrel startup events
 if (require('electron-squirrel-startup')) {
@@ -19,6 +17,15 @@ process.on('uncaughtException', (error) => {
 
 let mainWindow = null;
 
+// Funzione per ottenere il percorso base dei file statici
+function getStaticBasePath() {
+  if (isDev) {
+    return path.join(__dirname, 'dist')
+  }
+  // In production, i file sono in app.asar.unpacked/dist
+  return path.join(process.resourcesPath, 'app.asar.unpacked', 'dist')
+}
+
 const createWindow = () => {
   // Create the browser window.
   mainWindow = new BrowserWindow({
@@ -27,20 +34,35 @@ const createWindow = () => {
     minWidth: 1280,
     minHeight: 700,
     webPreferences: {
-      nodeIntegration: true,
+      nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      sandbox: false,
+      webSecurity: true
     },
     backgroundColor: '#131211'
   })
 
-  // Load the app
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000')
     mainWindow.webContents.openDevTools()
   } else {
-    // In production, load from the asar archive
-    mainWindow.loadFile(path.join(__dirname, 'out', 'index.html'))
+    // In production, carica l'HTML dalla cartella dist non compressa
+    const indexPath = path.join(getStaticBasePath(), 'index.html')
+    
+    // Leggi e modifica l'HTML per usare percorsi corretti
+    let htmlContent = fs.readFileSync(indexPath, 'utf8')
+    
+    // Sostituisci i percorsi relativi con percorsi assoluti
+    const staticBasePath = getStaticBasePath().replace(/\\/g, '/')
+    htmlContent = htmlContent.replace(/\.\/_next\//g, `${staticBasePath}/_next/`)
+    
+    // Scrivi l'HTML modificato in un file temporaneo
+    const tempPath = path.join(app.getPath('temp'), 'index.html')
+    fs.writeFileSync(tempPath, htmlContent, 'utf8')
+    
+    // Carica il file temporaneo
+    mainWindow.loadFile(tempPath)
   }
 
   // Handle IPC events

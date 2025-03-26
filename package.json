@@ -21,16 +21,17 @@
 			"output": "release"
 		},
 		"files": [
-			"dist/**/*",
 			"main.js",
-			"preload.js"
+			"preload.js",
+			"package.json"
 		],
-		 "extraResources": [
-      {
-        "from": "dist",
-        "to": "dist"
-      }
-    ],
+		"extraResources": [
+			{
+				"from": "dist",
+				"to": "app.asar.unpacked/dist",
+				"filter": ["**/*"]
+			}
+		],
 		"win": {
 			"target": "nsis",
 			"icon": "src/app/icon.ico"

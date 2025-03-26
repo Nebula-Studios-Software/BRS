@@ -20,7 +20,12 @@ function runCommand(command, args, options = {}) {
 const nextDev = runCommand('npm', ['run', 'next-dev'])
 
 // Start Electron when Next.js is ready (wait-on handles this)
-const electronDev = runCommand('npm', ['run', 'electron-dev'])
+const electronDev = runCommand('npm', ['run', 'electron-dev'], {
+  env: {
+    ...process.env,
+    NODE_ENV: 'development'
+  }
+})
 
 // Handle cleanup
 function cleanup() {
