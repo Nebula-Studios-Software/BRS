@@ -1,6 +1,6 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron/main')
-const path = require('path')
-const fs = require('fs')
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const path = require('path');
+const fs = require('fs');
 const { UpdateManager } = require('./src/lib/updater');
 
 // Determina se siamo in modalità sviluppo
@@ -17,6 +17,8 @@ process.on('uncaughtException', (error) => {
 })
 
 let mainWindow = null;
+let splashScreen = null;
+let childProcesses = new Set();
 
 // Funzione per ottenere il percorso base dei file statici
 function getStaticBasePath() {
@@ -27,6 +29,18 @@ function getStaticBasePath() {
   return path.join(process.resourcesPath, 'app.asar.unpacked', 'dist')
 }
 
+// Funzione per la pulizia dei processi
+function cleanupProcesses() {
+  for (let pid of childProcesses) {
+    try {
+      process.kill(pid);
+    } catch (error) {
+      console.error(`Failed to kill process ${pid}:`, error);
+    }
+  }
+  childProcesses.clear();
+}
+
 const createWindow = () => {
   // Create the browser window.
   mainWindow = new BrowserWindow({
@@ -34,6 +48,7 @@ const createWindow = () => {
     height: 800,
     minWidth: 1280,
     minHeight: 700,
+    icon: path.join(__dirname, 'assets', 'icons', 'icon.ico'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -41,7 +56,8 @@ const createWindow = () => {
       sandbox: false,
       webSecurity: true
     },
-    backgroundColor: '#131211'
+    backgroundColor: '#131211',
+    autoHideMenuBar: true,
   })
 
   if (isDev) {
@@ -57,7 +73,7 @@ const createWindow = () => {
     // Sostituisci i percorsi relativi con percorsi assoluti
     const staticBasePath = getStaticBasePath().replace(/\\/g, '/')
     htmlContent = htmlContent.replace(/\.\/_next\//g, `${staticBasePath}/_next/`)
-    
+
     // Scrivi l'HTML modificato in un file temporaneo
     const tempPath = path.join(app.getPath('temp'), 'index.html')
     fs.writeFileSync(tempPath, htmlContent, 'utf8')
@@ -80,10 +96,19 @@ const createWindow = () => {
   // Handle process started event
   ipcMain.on('process:started', (event, pid) => {
     console.log(`Main process received process:started with PID: ${pid}`);
-    // Forward the PID to the renderer
+    childProcesses.add(pid);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('process:started', pid);
     }
+  });
+
+  ipcMain.on('process:ended', (event, pid) => {
+    childProcesses.delete(pid);
+  });
+
+  mainWindow.on('closed', () => {
+    cleanupProcesses();
+    mainWindow = null;
   });
 }
 
@@ -98,10 +123,15 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  cleanupProcesses();
   if (process.platform !== 'darwin') {
     app.quit()
   }
 })
+
+app.on('before-quit', () => {
+  cleanupProcesses();
+});
 
 // Handle file dialogs
 ipcMain.handle('dialog:openFile', async (event, options) => {

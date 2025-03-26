@@ -226,25 +226,20 @@ contextBridge.exposeInMainWorld('electron', {
         try {
           console.log(`Esecuzione comando: taskkill /pid ${pid} /T /F`);
           execSync(`taskkill /pid ${pid} /T /F`, { encoding: 'utf8' });
+          // Notifica al main process che il processo è terminato
+          ipcRenderer.send('process:ended', pid);
           console.log('Processo terminato con successo');
           return true;
         } catch (error) {
           console.error(`Errore nell'esecuzione di taskkill:`, error);
-          
-          // Prova un metodo alternativo
-          console.log('Tentativo alternativo di terminazione...');
-          const proc = runningProcesses.get(parseInt(pid));
-          if (proc) {
-            proc.kill();
-            console.log('Processo kill() chiamato');
-            return true;
-          }
           return false;
         }
       } else {
         const proc = runningProcesses.get(parseInt(pid));
         if (proc) {
           proc.kill('SIGKILL'); // Più aggressivo di SIGTERM
+          // Notifica al main process che il processo è terminato
+          ipcRenderer.send('process:ended', pid);
           console.log('Processo kill(SIGKILL) chiamato');
           return true;
         }
@@ -357,6 +352,14 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.removeAllListeners('update-available')
         ipcRenderer.removeAllListeners('update-progress')
         ipcRenderer.removeAllListeners('update-downloaded')
+    }
+  },
+
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    onUpdateProgress: (callback) => ipcRenderer.on('update-progress', callback),
+    removeUpdateListeners: () => {
+        ipcRenderer.removeAllListeners('update-progress')
     }
   }
 });

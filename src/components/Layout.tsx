@@ -282,7 +282,7 @@ export const Layout: React.FC = () => {
             </div>
           </Panel>
 
-          <PanelResizeHandle className="w-2 bg-surface hover:bg-muted rounded-sm transition-colors cursor-col-resize flex items-center justify-center mx-1">
+          <PanelResizeHandle className="w-4 bg-surface hover:bg-muted rounded-sm transition-colors cursor-col-resize flex items-center justify-center mx-1">
             <div className="w-1 h-8 bg-border rounded-full"></div>
           </PanelResizeHandle>
 

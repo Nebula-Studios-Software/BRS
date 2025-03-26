@@ -1,6 +1,6 @@
 {
 	"name": "blender-render-suite",
-	"version": "0.9.2",
+	"version": "0.9.3",
 	"description": "A modern Blender rendering interface",
 	"license": "MIT",
 	"author": "Nebula Studios",
@@ -23,7 +23,8 @@
 		"files": [
 			"main.js",
 			"preload.js",
-			"package.json"
+			"package.json",
+			"src/lib/**/*"
 		],
 		"extraResources": [
 			{
@@ -41,15 +42,15 @@
 		}],
 		"win": {
 			"target": "nsis",
-			"icon": "src/app/icon.ico"
+			"icon": "./assets/icons/icon.ico"
 		},
 		"mac": {
 			"target": "dmg",
-			"icon": "src/app/icon.icns"
+			"icon": "./assets/icons/icon.icns"
 		},
 		"linux": {
 			"target": "AppImage",
-			"icon": "src/app/icon.png"
+			"icon": "./assets/icons/icon.png"
 		}
 	},
 	"dependencies": {
