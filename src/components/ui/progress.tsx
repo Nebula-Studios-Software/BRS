@@ -28,6 +28,7 @@ const Progress = React.forwardRef<
         variant === "warning" && "bg-warning",
       )}
       style={{ transform: `translateX(-${100 - (value || 0)}%)` }}
+      aria-label={`Progress: ${value}%`}
     />
   </ProgressPrimitive.Root>
 ));

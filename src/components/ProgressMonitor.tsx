@@ -120,9 +120,6 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
     const framesCompleted = frame - startFrame;
     const percentage = (framesCompleted / totalFrames) * 10000;
 
-    console.log(
-      `Frames Completed: ${framesCompleted}, Percentage: ${percentage}`
-    );
     return {
       percentage: Math.min(100, Math.max(0, percentage)),
       currentFrame: frame.toString(),
@@ -196,6 +193,7 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                   value={displayProgress.frameProgress}
                   size="md"
                   color="primary"
+                  aria-label="Frame rendering progress"
                 />
               </div>
             ) : (
@@ -207,10 +205,11 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                   </span>
                 </div>
                 <ProgressNext
-                isStriped
+                  isStriped
                   value={100}
                   size="md"
                   color="default"
+                  aria-label="Waiting for render to start"
                 />
               </div>
             )}
@@ -235,6 +234,7 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                       : 0
                   }
                   className="h-2.5"
+                  aria-label="Sample rendering progress"
                 />
               </div>
             )}
@@ -296,6 +296,7 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                         ? "danger"
                         : "default"
                     }
+                    aria-label="System memory usage"
                   />
                   <div className="relative z-10">
                     <div className="flex items-center justify-between">
@@ -346,6 +347,7 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                           ? "warning"
                           : "default"
                       }
+                      aria-label="CPU usage"
                     />
                     <div className="relative z-10">
                       <div className="flex items-center justify-between">
@@ -387,6 +389,7 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                                     ? "warning"
                                     : "default"
                                 }
+                                aria-label={`CPU core ${index + 1} usage`}
                               />
                               <div className="relative z-10">
                                 <div className="flex items-center justify-between">
@@ -432,6 +435,7 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                           ? "warning"
                           : "default"
                       }
+                      aria-label="GPU compute usage"
                     />
                     <div className="relative z-10">
                       <div className="flex items-center justify-between">
@@ -471,6 +475,7 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                               ? "warning"
                               : "default"
                           }
+                          aria-label="GPU memory usage"
                         />
                         <div className="relative z-10">
                           <div className="flex items-center justify-between">
@@ -510,6 +515,7 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                               ? "warning"
                               : "default"
                           }
+                          aria-label="GPU temperature"
                         />
                         <div className="relative z-10">
                           <div className="flex items-center justify-between">

@@ -404,6 +404,7 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
 											console.error("Errore durante l'apertura del file:", error);
 										}
 									}}
+									aria-label="Browse file"
 								>
 									<FileSearch size={16}/>
 								</Button>
@@ -434,6 +435,7 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
 											console.error("Errore durante l'apertura della directory:", error);
 										}
 									}}
+									aria-label="Browse directory"
 								>
 									<FolderSearch />
 								</Button>
@@ -548,6 +550,7 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
 										content: 'p-0 border-small border-divider bg-default-100 text-text-secondary',
 									},
 								}}
+                aria-label="Presets"
 							>
 								{Object.keys(presets).map((preset) => (
 									<SelectItem key={preset} textValue={preset}>

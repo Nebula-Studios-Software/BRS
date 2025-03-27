@@ -1,5 +1,4 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
-const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 
@@ -38,8 +37,6 @@ function getStaticBasePath() {
     console.log(`Testing static path: ${testPath}`)
     if (fs.existsSync(testPath)) {
       console.log(`Found valid static path: ${testPath}`)
-      // Aggiungi il percorso alle variabili d'ambiente
-      process.env.STATIC_PATH = testPath
       return testPath
     }
   }
@@ -112,72 +109,6 @@ async function detectBlenderVersions() {
   }
 }
 
-// Configura l'autoUpdater
-autoUpdater.autoDownload = false;
-autoUpdater.logger = require('electron-log');
-autoUpdater.logger.transports.file.level = 'info';
-
-// Gestisci gli eventi dell'autoUpdater
-autoUpdater.on('checking-for-update', () => {
-  console.log('Checking for updates...');
-});
-
-autoUpdater.on('update-available', (info) => {
-  if (mainWindow) {
-    mainWindow.webContents.send('updates:available', info);
-  }
-});
-
-autoUpdater.on('update-not-available', () => {
-  if (mainWindow) {
-    mainWindow.webContents.send('updates:not-available');
-  }
-});
-
-autoUpdater.on('download-progress', (progressObj) => {
-  if (mainWindow) {
-    mainWindow.webContents.send('updates:download-progress', progressObj);
-  }
-});
-
-autoUpdater.on('update-downloaded', (info) => {
-  if (mainWindow) {
-    mainWindow.webContents.send('updates:downloaded', info);
-  }
-});
-
-autoUpdater.on('error', (error) => {
-  console.error('Update error:', error);
-  if (mainWindow) {
-    mainWindow.webContents.send('updates:error', error.message);
-  }
-});
-
-// Gestisci le richieste IPC per gli aggiornamenti
-ipcMain.handle('updates:check', () => {
-  if (!isDev) {
-    return autoUpdater.checkForUpdates();
-  }
-});
-
-ipcMain.handle('updates:download', () => {
-  if (!isDev) {
-    return autoUpdater.downloadUpdate();
-  }
-});
-
-ipcMain.handle('updates:cancel', () => {
-  if (!isDev) {
-    return autoUpdater.cancelDownload();
-  }
-});
-
-ipcMain.handle('updates:install', () => {
-  if (!isDev) {
-    autoUpdater.quitAndInstall(false, true);
-  }
-});
-
 const createWindow = () => {
   // Create the browser window.
   mainWindow = new BrowserWindow({
@@ -212,9 +143,9 @@ const createWindow = () => {
       hardResetMethod: 'exit'
     })
   } else {
-    // In production, carica l'HTML dalla cartella dist non compressa
+    // In production, carica l'HTML dalla cartella dist
     const staticBasePath = getStaticBasePath()
-    console.log('Static base path:', staticBasePath)
+    console.log('Using static base path:', staticBasePath)
 
     const indexPath = path.join(staticBasePath, 'index.html')
     console.log('Loading index from:', indexPath)
@@ -225,24 +156,8 @@ const createWindow = () => {
       return
     }
 
-    // Leggi e modifica l'HTML per usare percorsi corretti
-    let htmlContent = fs.readFileSync(indexPath, 'utf8')
-
-    // Sostituisci i percorsi relativi con percorsi assoluti
-    const normalizedPath = staticBasePath.replace(/\\/g, '/')
-    console.log('Using normalized path for replacements:', normalizedPath)
-
-    htmlContent = htmlContent.replace(/"\.\//g, `"${normalizedPath}/`)
-    htmlContent = htmlContent.replace(/'\.\//g, `'${normalizedPath}/`)
-    htmlContent = htmlContent.replace(/=\.\//g, `=${normalizedPath}/`)
-
-    // Scrivi l'HTML modificato in un file temporaneo
-    const tempPath = path.join(app.getPath('temp'), 'index.html')
-    fs.writeFileSync(tempPath, htmlContent, 'utf8')
-    console.log('Written modified HTML to:', tempPath)
-
-    // Carica il file temporaneo
-    mainWindow.loadFile(tempPath)
+    // Carica direttamente il file HTML
+    mainWindow.loadFile(indexPath)
   }
 
   // Handle IPC events
@@ -269,13 +184,6 @@ const createWindow = () => {
   mainWindow.on('closed', () => {
     cleanupProcesses();
     mainWindow = null;
-  });
-
-  // Controlla gli aggiornamenti dopo che la finestra è stata caricata
-  mainWindow.webContents.on('did-finish-load', () => {
-    if (!isDev) {
-      autoUpdater.checkForUpdates();
-    }
   });
 }
 

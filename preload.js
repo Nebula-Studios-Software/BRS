@@ -275,9 +275,9 @@ contextBridge.exposeInMainWorld('electron', {
     const usedMemory = totalMemory - freeMemory;
 
     return {
-        total: formatBytes(totalMemory),
-        used: formatBytes(usedMemory),
-        free: formatBytes(freeMemory)
+      total: formatBytes(totalMemory),
+      used: formatBytes(usedMemory),
+      free: formatBytes(freeMemory)
     };
   },
 
@@ -425,23 +425,3 @@ function formatBytes(bytes) {
   const gb = bytes / (1024 * 1024 * 1024);
   return `${Math.round(gb * 10) / 10}GB`;
 }
-
-// Aggiungi API per gli aggiornamenti
-contextBridge.exposeInMainWorld('updates', {
-  checkForUpdates: () => ipcRenderer.invoke('updates:check'),
-  downloadUpdate: () => ipcRenderer.invoke('updates:download'),
-  cancelDownload: () => ipcRenderer.invoke('updates:cancel'),
-  quitAndInstall: () => ipcRenderer.invoke('updates:install'),
-  onUpdateAvailable: (callback) => ipcRenderer.on('updates:available', callback),
-  onUpdateNotAvailable: (callback) => ipcRenderer.on('updates:not-available', callback),
-  onDownloadProgress: (callback) => ipcRenderer.on('updates:download-progress', callback),
-  onUpdateDownloaded: (callback) => ipcRenderer.on('updates:downloaded', callback),
-  onUpdateError: (callback) => ipcRenderer.on('updates:error', callback),
-  removeAllListeners: () => {
-    ipcRenderer.removeAllListeners('updates:available')
-    ipcRenderer.removeAllListeners('updates:not-available')
-    ipcRenderer.removeAllListeners('updates:download-progress')
-    ipcRenderer.removeAllListeners('updates:downloaded')
-    ipcRenderer.removeAllListeners('updates:error')
-  }
-})

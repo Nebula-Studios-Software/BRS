@@ -12,11 +12,10 @@ import toast from 'react-hot-toast';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
-import { Combine, FolderSearch, Maximize2, Square } from 'lucide-react';
+import { Combine, FolderSearch, Maximize2, Square, History } from 'lucide-react';
 import { BlenderVersionSelector } from './BlenderVersionSelector';
 import { LoadingScreen } from './LoadingScreen';
-import { UpdateStatusBar } from './UpdateStatusBar';
-import { useUpdates } from '../hooks/useUpdates';
+import { RenderHistory } from './RenderHistory';
 
 interface LogEntry {
 	timestamp: string;
@@ -45,16 +44,7 @@ export const Layout: React.FC = () => {
 	const [isSavePresetOpen, setIsSavePresetOpen] = useState(false);
 	const [isCommandExpanded, setIsCommandExpanded] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
-
-	const {
-		isUpdateAvailable,
-		updateInfo,
-		downloadProgress,
-		isDownloading,
-		startDownload,
-		cancelDownload,
-		restartApp,
-	} = useUpdates();
+	const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
 	// Verifica se siamo nel browser
 	useEffect(() => {
@@ -305,8 +295,16 @@ export const Layout: React.FC = () => {
 						{/* Left panel - Command Builder */}
 						<Panel defaultSize={60} minSize={30}>
 							<div className="h-full bg-surface rounded-lg border border-border overflow-hidden mr-2">
-								<div className="p-4 border-b border-border">
+								<div className="p-4 border-b border-border flex justify-between">
 									<BlenderVersionSelector />
+									<Button
+										variant="light"
+										color="primary"
+										startContent={<History size={16} />}
+										onPress={() => setIsHistoryOpen(true)}
+									>
+										Render History
+									</Button>
 								</div>
 								<CommandBuilder onCommandUpdate={handleCommandUpdate} />
 							</div>
@@ -346,6 +344,11 @@ export const Layout: React.FC = () => {
 												isIconOnly
 												onPress={() => setIsCommandExpanded(!isCommandExpanded)}
 												className="text-sm"
+												aria-label={
+													isCommandExpanded
+														? 'Collapse command preview'
+														: 'Expand command preview'
+												}
 											>
 												<Maximize2 size={16} />
 											</Button>
@@ -399,15 +402,9 @@ export const Layout: React.FC = () => {
 					</PanelGroup>
 				</div>
 			</div>
-			<UpdateStatusBar
-				isUpdateAvailable={isUpdateAvailable}
-				updateInfo={updateInfo}
-				downloadProgress={downloadProgress}
-				isDownloading={isDownloading}
-				onStartDownload={startDownload}
-				onCancelDownload={cancelDownload}
-				onRestartApp={restartApp}
-			/>
+
+			{/* Render History Drawer */}
+			<RenderHistory open={isHistoryOpen} onOpenChange={setIsHistoryOpen} />
 		</>
 	);
 };

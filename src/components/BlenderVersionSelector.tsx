@@ -40,7 +40,7 @@ export function BlenderVersionSelector() {
   console.log('Selected Version:', selectedVersion);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 flex-1">
       <Label>Blender Version</Label>
       <div className="flex gap-2">
         {isLoading ? (

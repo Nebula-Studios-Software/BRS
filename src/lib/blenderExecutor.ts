@@ -35,15 +35,31 @@ interface ProcessResult {
 	stderr: string;
 }
 
+interface RenderLog {
+	id: string;
+	engine: string;
+	startDate: string;
+	endDate: string;
+	command: string;
+	parameters: Record<string, any>;
+	renderTime: number;
+	status: 'completed' | 'stopped' | 'error';
+}
+
 // Utility function to check if we're in a browser environment
 const isBrowser = () => typeof window !== 'undefined';
 
 export class BlenderExecutor extends EventEmitter {
+	private engine: string;
+	private startTime: Date | null;
+	private command: string;
+	private parameters: Record<string, any>;
+	private elapsedTime: number;
 	private state: {
-		isRunning: boolean;
-		pid?: number;
-	} = {
-		isRunning: false,
+		isRendering: boolean;
+		pid: number | null;
+		startTime: Date | null;
+		elapsedTime: number;
 	};
 	private startFrame = 1;
 	private endFrame = 1;
@@ -55,6 +71,17 @@ export class BlenderExecutor extends EventEmitter {
 
 	constructor() {
 		super();
+		this.engine = 'Unknown';
+		this.startTime = null;
+		this.command = '';
+		this.parameters = {};
+		this.elapsedTime = 0;
+		this.state = {
+			isRendering: false,
+			pid: null,
+			startTime: null,
+			elapsedTime: 0,
+		};
 		this.logPath =
 			isBrowser() && window.electron
 				? path.join(window.electron.getAppDataPath(), 'render.log')
@@ -163,12 +190,22 @@ export class BlenderExecutor extends EventEmitter {
 		}
 	}
 
+	setEngine(engine: string) {
+		this.engine = engine;
+	}
+
+	private updateElapsedTime() {
+		if (this.state.startTime) {
+			this.elapsedTime = Math.floor((new Date().getTime() - this.state.startTime.getTime()) / 1000);
+		}
+	}
+
 	async execute(
 		command: string[],
 		startFrame = 1,
 		endFrame = 1
 	): Promise<boolean> {
-		if (this.state.isRunning) {
+		if (this.state.isRendering) {
 			const message = 'ERROR: Un altro processo di rendering è già in esecuzione';
 			await this.log(LogLevel.ERROR, message);
 			this.emit('output', message);
@@ -178,11 +215,50 @@ export class BlenderExecutor extends EventEmitter {
 		this.startFrame = startFrame;
 		this.endFrame = endFrame;
 
+		let timeInterval: NodeJS.Timeout | undefined;
+
 		try {
-			this.state = {
-				isRunning: true,
-				pid: undefined,
+			// Determina l'engine dal comando
+			if (command.includes('cycles')) {
+				this.setEngine('Cycles');
+			} else if (command.includes('eevee')) {
+				this.setEngine('Eevee');
+			} else if (command.includes('workbench')) {
+				this.setEngine('Workbench');
+			} else {
+				this.setEngine('Unknown');
+			}
+
+			// Estrai i parametri dal comando
+			const params: Record<string, any> = {};
+			command.forEach(arg => {
+				if (arg.startsWith('--')) {
+					const [key, value] = arg.slice(2).split('=');
+					params[key] = value;
+				}
+			});
+
+			// Salva il comando e i parametri
+			this.command = command.join(' ');
+			this.parameters = {
+				startFrame,
+				endFrame,
+				renderEngine: this.engine,
+				outputFormat: 'PNG',
+				resolution: '1920x1080',
 			};
+
+			this.state = {
+				isRendering: true,
+				pid: null,
+				startTime: new Date(),
+				elapsedTime: 0,
+			};
+
+			// Avvio l'intervallo per aggiornare il tempo
+			timeInterval = setInterval(() => {
+				this.updateElapsedTime();
+			}, 1000);
 
 			this.emit('renderStarted');
 			const commandStr = command.join(' ');
@@ -190,7 +266,7 @@ export class BlenderExecutor extends EventEmitter {
 			this.emit('output', `Avvio comando: ${commandStr}`);
 
 			if (!isBrowser() || !window.electron) {
-				this.state.isRunning = false;
+				this.state.isRendering = false;
 				const message = 'Non in ambiente browser';
 				await this.log(LogLevel.ERROR, message);
 				this.emit('renderCompleted', false, message);
@@ -220,16 +296,19 @@ export class BlenderExecutor extends EventEmitter {
 				await this.log(LogLevel.INFO, message);
 				this.emit('output', message);
 				this.emit('renderCompleted', true, message);
+				this.saveRenderLog('completed');
 			} else if (result.code === -1) {
 				const message = "Processo di rendering interrotto dall'utente";
 				await this.log(LogLevel.INFO, message);
 				this.emit('output', message);
 				this.emit('renderCompleted', false, message);
+				this.saveRenderLog('stopped');
 			} else {
 				const message = `Blender terminato con codice di errore ${result.code}`;
 				await this.log(LogLevel.ERROR, message);
 				this.emit('output', message);
 				this.emit('renderCompleted', false, message);
+				this.saveRenderLog('error');
 			}
 
 			return result.code === 0;
@@ -238,13 +317,17 @@ export class BlenderExecutor extends EventEmitter {
 			await this.log(LogLevel.ERROR, message, error as Error);
 			this.emit('output', message);
 			this.emit('renderCompleted', false, `Errore: ${error}`);
+			this.saveRenderLog('error');
 			return false;
 		} finally {
 			if (window.ipcRenderer) {
 				window.ipcRenderer.removeAllListeners('process:output');
 			}
-			this.state.isRunning = false;
+			this.state.isRendering = false;
 			await this.flushLogs();
+			if (timeInterval) {
+				clearInterval(timeInterval);
+			}
 		}
 	}
 
@@ -309,6 +392,31 @@ export class BlenderExecutor extends EventEmitter {
 		}
 	}
 
+	private saveRenderLog(status: 'completed' | 'stopped' | 'error') {
+		if (typeof window === 'undefined' || !window.electron) return;
+
+		const log: RenderLog = {
+			id: crypto.randomUUID(),
+			engine: this.engine || 'Unknown',
+			startDate: this.state.startTime?.toISOString() || new Date().toISOString(),
+			endDate: new Date().toISOString(),
+			command: this.command,
+			parameters: this.parameters,
+			renderTime: this.elapsedTime || 0,
+			status: status
+		};
+
+		// Carica i log esistenti
+		const savedLogs = localStorage.getItem('renderHistory');
+		const logs = savedLogs ? JSON.parse(savedLogs) : [];
+
+		// Aggiungi il nuovo log
+		logs.push(log);
+
+		// Salva i log aggiornati
+		localStorage.setItem('renderHistory', JSON.stringify(logs));
+	}
+
 	async stop(): Promise<void> {
 		console.log('Stop chiamato, stato corrente:', this.state);
 
@@ -317,41 +425,31 @@ export class BlenderExecutor extends EventEmitter {
 			return;
 		}
 
-		await this.writeToLog('Attempting to stop render process');
-		this.emit('output', 'Attempting to stop render process');
-		console.log(`Tentativo di terminare il processo con PID: ${this.state.pid}`);
+		try {
+			console.log(`Tentativo di terminare il processo con PID: ${this.state.pid}`);
+			const killed = await window.electron.killProcess(this.state.pid);
+			console.log(`Risultato killProcess: ${killed}`);
 
-		if (isBrowser() && window.electron) {
-			try {
-				console.log(
-					`Chiamata a window.electron.killProcess con PID: ${this.state.pid}`
-				);
-				const killed = await window.electron.killProcess(this.state.pid);
-				console.log(`Risultato killProcess: ${killed}`);
-
-				if (killed) {
-					// Reset process state only after successful kill
-					this.state = { isRunning: false };
-
-					await this.writeToLog('Render process stopped successfully');
-					this.emit('output', 'Render process stopped successfully');
-					this.emit('renderCompleted', false, 'Render process stopped by user');
-					console.log('Processo terminato con successo');
-				} else {
-					await this.writeToLog('Failed to stop render process');
-					this.emit('output', 'Failed to stop render process');
-					console.log("Fallimento nell'arresto del processo");
-				}
-			} catch (error) {
-				console.error('Failed to kill process:', error);
-				this.emit('output', `Error stopping process: ${error}`);
+			if (killed) {
+				this.saveRenderLog('stopped');
+				this.state = {
+					...this.state,
+					isRendering: false,
+					pid: null,
+					startTime: null,
+					elapsedTime: 0,
+				};
+				this.emit('renderComplete');
+				console.log('Processo terminato con successo');
+			} else {
+				console.log("Fallimento nell'arresto del processo");
 			}
-		} else {
-			console.log('window.electron non disponibile');
+		} catch (error) {
+			console.error('Errore durante la fermata:', error);
 		}
 	}
 
 	isRendering(): boolean {
-		return this.state.isRunning;
+		return this.state.isRendering;
 	}
 }

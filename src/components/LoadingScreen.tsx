@@ -22,11 +22,6 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isLoading }) => {
 				transition={{ duration: 0.5 }}
 				className="flex flex-col items-center space-y-6"
 			>
-				<Image
-					src="/ext_light_hq.png"
-					alt="Blender Render Suite Logo"
-					width={300}
-				/>
 				<div className="w-64">
 					<Progress
 						size="sm"

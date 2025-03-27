@@ -1,13 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
   images: {
     unoptimized: true,
   },
-  output: process.env.NODE_ENV === 'development' ? undefined : 'export',
+  // Configurazione per la produzione
   distDir: 'dist',
-  assetPrefix: process.env.NODE_ENV === 'development' ? undefined : '.',
-  basePath: process.env.NODE_ENV === 'development' ? undefined : '',
+  // Configurazione per il routing
   trailingSlash: true,
+  poweredByHeader: false,
+  // Configurazione per la build statica
+  reactStrictMode: true,
+  swcMinify: true,
+  // Configurazione per i file statici
+  assetPrefix: process.env.NODE_ENV === 'production' ? './' : '',
+  basePath: process.env.NODE_ENV === 'production' ? '' : '',
   // Abilita il Fast Refresh in development
   webpack: (config, { dev, isServer }) => {
     if (dev && !isServer) {
@@ -16,19 +23,7 @@ const nextConfig = {
         ignored: ['**/.git/**', '**/node_modules/**']
       }
     }
-    // Aggiungi gestione degli asset statici
-    config.module.rules.push({
-      test: /\.(png|jpg|gif|svg)$/i,
-      type: 'asset/resource',
-      generator: {
-        filename: 'static/images/[name][ext]'
-      }
-    })
     return config
-  },
-  // Assicurati che i percorsi siano corretti in produzione
-  publicRuntimeConfig: {
-    staticFolder: '.',
   }
 }
 
