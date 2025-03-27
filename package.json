@@ -1,6 +1,6 @@
 {
 	"name": "blender-render-suite",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"description": "A modern Blender rendering interface",
 	"license": "GPL-3.0-only",
 	"author": "Nebula Studios",
