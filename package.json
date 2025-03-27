@@ -1,8 +1,8 @@
 {
 	"name": "blender-render-suite",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "A modern Blender rendering interface",
-	"license": "MIT",
+	"license": "GPL-3.0-only",
 	"author": "Nebula Studios",
 	"main": "main.js",
 	"scripts": {
@@ -35,14 +35,29 @@
 				]
 			}
 		],
-		 "publish": [{
-			"provider": "github",
-			"owner": "Nebula-Studios-Software",
-			"repo": "BRS"
-		}],
+		"generateUpdatesFilesForAllChannels": true,
 		"win": {
-			"target": "nsis",
+			"target": [
+				{
+					"target": "nsis",
+					"arch": [
+						"x64"
+					]
+				}
+			],
 			"icon": "./assets/icons/icon.ico"
+		},
+		"nsis": {
+			"oneClick": false,
+			"perMachine": false,
+			"allowToChangeInstallationDirectory": true,
+			"deleteAppDataOnUninstall": true,
+			"createDesktopShortcut": true,
+			"createStartMenuShortcut": true,
+			"shortcutName": "Blender Render Suite",
+			"uninstallDisplayName": "${productName}",
+			"differentialPackage": true,
+			"license": "./assets/license.txt"
 		},
 		"mac": {
 			"target": "dmg",
@@ -57,7 +72,7 @@
 		"@heroui/react": "^2.7.5",
 		"@radix-ui/react-accordion": "^1.2.3",
 		"@radix-ui/react-checkbox": "^1.0.4",
-		"@radix-ui/react-dialog": "^1.0.5",
+		"@radix-ui/react-dialog": "^1.1.6",
 		"@radix-ui/react-label": "^2.0.2",
 		"@radix-ui/react-progress": "^1.0.3",
 		"@radix-ui/react-scroll-area": "^1.0.5",
@@ -70,7 +85,6 @@
 		"clsx": "^2.1.1",
 		"electron-squirrel-startup": "^1.0.1",
 		"electron-store": "^8.2.0",
-		"electron-updater": "^6.3.9",
 		"framer-motion": "^12.6.0",
 		"fs": "^0.0.1-security",
 		"lucide-react": "^0.321.0",
@@ -94,6 +108,7 @@
 		"concurrently": "^9.1.2",
 		"electron": "^35.0.3",
 		"electron-builder": "^24.9.1",
+		"electron-reload": "^2.0.0-alpha.1",
 		"postcss": "^8.4.35",
 		"tailwindcss": "^3.4.1",
 		"typescript": "^5.3.3",

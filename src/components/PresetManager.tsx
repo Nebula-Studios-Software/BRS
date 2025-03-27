@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Button } from '@heroui/react'
-import { Input } from './ui/input'
+import { Input } from '@heroui/react'
 import { Label } from './ui/label'
 import { Preset } from '@/lib/settingsManager'
 import toast from 'react-hot-toast'
+import { PenLine, Save, X } from 'lucide-react'
 
 interface PresetManagerProps {
   open: boolean
@@ -59,7 +60,7 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] bg-surface p-6 rounded-lg border border-border shadow-lg">
+        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] bg-surface p-6 rounded-lg border border-border shadow-lg animate-enter">
           <Dialog.Title className="text-lg font-semibold mb-4 text-text-primary">
             Manage Presets
           </Dialog.Title>
@@ -73,6 +74,7 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
                       placeholder="New name"
+                      variant='underlined'
                       className="flex-1 text-text-primary"
                     />
                     <Button 
@@ -81,18 +83,20 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                       onPress={() => handleRename(name)}
                       className="px-2"
                       color='success'
+                      startContent={<Save size={16} />}
                     >
                       Save
                     </Button>
                     <Button 
                       size="sm" 
-                      variant="ghost" 
+                      variant="light" 
                       onPress={() => {
                         setEditingPreset(null)
                         setNewName('')
                       }}
                       className="px-2"
                       color='danger'
+                      startContent={<X size={16} />}
                     >
                       Cancel
                     </Button>
@@ -103,19 +107,21 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
                     <div className="flex items-center gap-2">
                       <Button
                         size="sm"
-                        variant="bordered"
+                        variant="ghost"
                         onPress={() => {
                           setEditingPreset(name)
                           setNewName(name)
                         }}
+                        startContent={<PenLine size={16} />}
                         isDisabled={name === 'default'}
                       >
                         Rename
                       </Button>
                       <Button
                         size="sm"
-                        variant="ghost"
+                        variant="light"
                         onPress={() => handleDelete(name)}
+                        startContent={<X size={16} />}
                         isDisabled={name === 'default'}
                         color='danger'
                       >
@@ -130,8 +136,10 @@ export const PresetManager: React.FC<PresetManagerProps> = ({
 
           <Dialog.Close asChild>
             <Button
-              variant="bordered"
+              variant="light"
+              fullWidth
               className="mt-6"
+              startContent={<X size={16} />}
             >
               Close
             </Button>

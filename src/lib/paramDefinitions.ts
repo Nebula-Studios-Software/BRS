@@ -206,39 +206,39 @@ export const ParamDefinitions = {
         description: 'Number of threads for rendering (0=auto)'
       }
     ],
-    'Debug': [
-      {
-        name: 'Debug',
-        param: ParamDefinitions.DEBUG,
-        type: 'bool',
-        description: 'Enable debug mode'
-      },
-      {
-        name: 'Debug Memory',
-        param: ParamDefinitions.DEBUG_MEMORY,
-        type: 'bool',
-        description: 'Show memory usage information'
-      },
-      {
-        name: 'Debug Cycles',
-        param: ParamDefinitions.DEBUG_CYCLES,
-        type: 'bool',
-        description: 'Enable Cycles debug'
-      }
-    ],
-    'Advanced': [
-      {
-        name: 'Enable Autoexec',
-        param: ParamDefinitions.ENABLE_AUTOEXEC,
-        type: 'bool',
-        description: 'Enable Python scripts auto-execution'
-      },
-      {
-        name: 'Disable Autoexec',
-        param: ParamDefinitions.DISABLE_AUTOEXEC,
-        type: 'bool',
-        description: 'Disable Python scripts auto-execution'
-      }
-    ]
+    // 'Debug': [
+    //   {
+    //     name: 'Debug',
+    //     param: ParamDefinitions.DEBUG,
+    //     type: 'bool',
+    //     description: 'Enable debug mode'
+    //   },
+    //   {
+    //     name: 'Debug Memory',
+    //     param: ParamDefinitions.DEBUG_MEMORY,
+    //     type: 'bool',
+    //     description: 'Show memory usage information'
+    //   },
+    //   {
+    //     name: 'Debug Cycles',
+    //     param: ParamDefinitions.DEBUG_CYCLES,
+    //     type: 'bool',
+    //     description: 'Enable Cycles debug'
+    //   }
+    // ],
+    // 'Advanced': [
+    //   {
+    //     name: 'Enable Autoexec',
+    //     param: ParamDefinitions.ENABLE_AUTOEXEC,
+    //     type: 'bool',
+    //     description: 'Enable Python scripts auto-execution'
+    //   },
+    //   {
+    //     name: 'Disable Autoexec',
+    //     param: ParamDefinitions.DISABLE_AUTOEXEC,
+    //     type: 'bool',
+    //     description: 'Disable Python scripts auto-execution'
+    //   }
+    // ]
   })
 }

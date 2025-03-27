@@ -1,7 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { UpdateManager } = require('./src/lib/updater');
 
 // Determina se siamo in modalità sviluppo
 const isDev = process.env.NODE_ENV === 'development'
@@ -25,8 +24,25 @@ function getStaticBasePath() {
   if (isDev) {
     return path.join(__dirname, 'dist')
   }
-  // In production, i file sono in app.asar.unpacked/dist
-  return path.join(process.resourcesPath, 'app.asar.unpacked', 'dist')
+  
+  // In production, prova diversi percorsi possibili
+  const possiblePaths = [
+    path.join(process.resourcesPath, 'app.asar.unpacked', 'dist'),
+    path.join(app.getAppPath(), 'dist'),
+    path.join(__dirname, 'dist'),
+    path.join(app.getPath('exe'), '..', 'resources', 'app.asar.unpacked', 'dist')
+  ]
+
+  for (const testPath of possiblePaths) {
+    console.log(`Testing static path: ${testPath}`)
+    if (fs.existsSync(testPath)) {
+      console.log(`Found valid static path: ${testPath}`)
+      return testPath
+    }
+  }
+
+  console.error('No valid static path found! Tested paths:', possiblePaths)
+  return possiblePaths[0] // Fallback al primo percorso
 }
 
 // Funzione per la pulizia dei processi
@@ -41,12 +57,64 @@ function cleanupProcesses() {
   childProcesses.clear();
 }
 
+// Funzione per rilevare le versioni di Blender installate
+async function detectBlenderVersions() {
+  // Ritorna array vuoto se non siamo su Windows
+  if (process.platform !== 'win32') {
+    console.log('Automatic Blender detection is only supported on Windows');
+    return [];
+  }
+
+  const BLENDER_BASE_PATH = 'C:\\Program Files\\Blender Foundation';
+  
+  try {
+    console.log('Checking Blender installation at:', BLENDER_BASE_PATH);
+    
+    if (!fs.existsSync(BLENDER_BASE_PATH)) {
+      console.log('Blender base directory not found at:', BLENDER_BASE_PATH);
+      return [];
+    }
+
+    const dirs = fs.readdirSync(BLENDER_BASE_PATH);
+    console.log('Found directories:', dirs);
+    
+    const blenderDirs = dirs.filter(dir => {
+      const isBlenderDir = dir.startsWith('Blender') && 
+        fs.statSync(path.join(BLENDER_BASE_PATH, dir)).isDirectory();
+      return isBlenderDir;
+    });
+
+    const versions = blenderDirs.map(dir => {
+      const execPath = path.join(BLENDER_BASE_PATH, dir, 'blender.exe');
+      
+      if (!fs.existsSync(execPath)) {
+        return null;
+      }
+
+      const version = dir.replace('Blender ', '');
+      
+      return {
+        version,
+        path: path.join(BLENDER_BASE_PATH, dir),
+        executablePath: execPath
+      };
+    }).filter(v => v !== null);
+
+    return versions.sort((a, b) => 
+      b.version.localeCompare(a.version, undefined, { numeric: true })
+    );
+  } catch (error) {
+    console.error('Error detecting Blender versions:', error);
+    return [];
+  }
+}
+
 const createWindow = () => {
   // Create the browser window.
   mainWindow = new BrowserWindow({
-    width: 1280,
+    width: 1440,
     height: 800,
-    minWidth: 1280,
+    minWidth: 1200,
     minHeight: 700,
     icon: path.join(__dirname, 'assets', 'icons', 'icon.ico'),
     webPreferences: {
@@ -62,28 +130,50 @@ const createWindow = () => {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000')
-    mainWindow.webContents.openDevTools()
+    // mainWindow.webContents.openDevTools()
+
+    // Abilita il refresh automatico in development
+    mainWindow.webContents.on('did-fail-load', () => {
+      mainWindow.loadURL('http://localhost:3000')
+    })
+
+    // Gestisci il reload quando Next.js ha finito di compilare
+    require('electron-reload')(__dirname, {
+      electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
+      hardResetMethod: 'exit'
+    })
   } else {
     // In production, carica l'HTML dalla cartella dist non compressa
-    const indexPath = path.join(getStaticBasePath(), 'index.html')
+    const staticBasePath = getStaticBasePath()
+    console.log('Using static base path:', staticBasePath)
+    
+    const indexPath = path.join(staticBasePath, 'index.html')
+    console.log('Loading index from:', indexPath)
+    
+    if (!fs.existsSync(indexPath)) {
+      console.error('index.html not found at:', indexPath)
+      app.quit()
+      return
+    }
     
     // Leggi e modifica l'HTML per usare percorsi corretti
     let htmlContent = fs.readFileSync(indexPath, 'utf8')
     
     // Sostituisci i percorsi relativi con percorsi assoluti
-    const staticBasePath = getStaticBasePath().replace(/\\/g, '/')
-    htmlContent = htmlContent.replace(/\.\/_next\//g, `${staticBasePath}/_next/`)
-
+    const normalizedPath = staticBasePath.replace(/\\/g, '/')
+    console.log('Using normalized path for replacements:', normalizedPath)
+    
+    htmlContent = htmlContent.replace(/\.\/_next\//g, `${normalizedPath}/_next/`)
+    htmlContent = htmlContent.replace(/"\/_next\//g, `"${normalizedPath}/_next/`)
+    
     // Scrivi l'HTML modificato in un file temporaneo
     const tempPath = path.join(app.getPath('temp'), 'index.html')
     fs.writeFileSync(tempPath, htmlContent, 'utf8')
+    console.log('Written modified HTML to:', tempPath)
     
     // Carica il file temporaneo
     mainWindow.loadFile(tempPath)
   }
-
-  // Inizializza l'update manager
-  new UpdateManager(mainWindow);
 
   // Handle IPC events
   ipcMain.on('process:output', (event, line) => {
@@ -202,3 +292,6 @@ ipcMain.handle('fs:mkdir', async (event, path) => {
     throw error
   }
 })
+
+// IPC handler per il rilevamento delle versioni di Blender
+ipcMain.handle('blender:detect-versions', detectBlenderVersions);

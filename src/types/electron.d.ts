@@ -12,13 +12,16 @@ interface Window {
       code: number
       stdout: string
       stderr: string
-      pid?: number  // PID is now returned at the top level
+      pid?: number
     }>
     getAppDataPath: () => string
     killProcess: (pid: number) => Promise<boolean>
     writeLogs: (logPath: string, content: string) => Promise<boolean>
-    getSystemMemory: () => SystemMemory;
-    getSystemUsage: () => Promise<SystemUsage>;
+    getSystemMemory: () => SystemMemory
+    getSystemUsage: () => Promise<SystemUsage>
+    blender: {
+      detectVersions: () => Promise<BlenderVersion[]>
+    }
   }
   ipcRenderer: {
     on: (channel: string, listener: (event: any, ...args: any[]) => void) => void
@@ -28,29 +31,30 @@ interface Window {
 }
 
 interface SystemMemory {
-  total: string;
-  used: string;
-  free: string;
+  total: string
+  used: string
+  free: string
 }
 
 interface GPUDetails {
-  memoryUtilization: number;
-  memoryUsed: number;
-  memoryTotal: number;
-  temperature: number;
+  memoryUtilization: number
+  memoryUsed: number
+  memoryTotal: number
+  temperature: number
 }
 
 interface SystemUsage {
-  cpu: number;
-  cpuModel: string;
-  cpuCount: number;
-  cpuPerCore: number[];
-  gpu: number | null;
-  gpuModel: string | null;
-  gpuDetails: GPUDetails | null;
+  cpu: number
+  cpuModel: string
+  cpuCount: number
+  cpuPerCore: number[]
+  gpu: number | null
+  gpuModel: string | null
+  gpuDetails: GPUDetails | null
 }
 
-interface Electron {
-  getSystemMemory: () => SystemMemory;
-  getSystemUsage: () => Promise<SystemUsage>;
+interface BlenderVersion {
+  version: string
+  path: string
+  executablePath: string
 }

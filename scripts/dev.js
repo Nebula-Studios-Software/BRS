@@ -16,14 +16,21 @@ function runCommand(command, args, options = {}) {
   return child
 }
 
-// Start Next.js dev server
-const nextDev = runCommand('npm', ['run', 'next-dev'])
+// Start Next.js dev server with proper HMR configuration
+const nextDev = runCommand('npm', ['run', 'next-dev'], {
+  env: {
+    ...process.env,
+    NEXT_WEBPACK_USEPOLLING: '1',
+    CHOKIDAR_USEPOLLING: 'true'
+  }
+})
 
 // Start Electron when Next.js is ready (wait-on handles this)
 const electronDev = runCommand('npm', ['run', 'electron-dev'], {
   env: {
     ...process.env,
-    NODE_ENV: 'development'
+    NODE_ENV: 'development',
+    ELECTRON_START_URL: 'http://localhost:3000'
   }
 })
 

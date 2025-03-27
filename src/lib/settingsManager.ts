@@ -21,6 +21,7 @@ export interface Settings {
 	blenderPath: string;
 	parameters: { [key: string]: any };
 	uiState: UIState;
+	lastBlenderVersion?: string;
 }
 
 // Utility function to check if we're in a browser environment
@@ -65,19 +66,30 @@ export class SettingsManager {
 			// Load settings
 			const savedSettings = await this.loadSettings();
 			if (savedSettings) {
-				this.settings = { ...this.settings, ...savedSettings };
+				this.settings = { ...this.getDefaultSettings(), ...savedSettings };
+			} else {
+				// Se non ci sono impostazioni salvate, usa e salva i valori predefiniti
+				this.settings = this.getDefaultSettings();
+				await this.saveSettings();
 			}
 
 			// Load presets
 			const savedPresets = await this.loadPresets();
 			if (savedPresets) {
-				this.presets = { ...this.presets, ...savedPresets };
+				this.presets = { ...this.getDefaultPresets(), ...savedPresets };
+			} else {
+				// Se non ci sono preset salvati, usa e salva i valori predefiniti
+				this.presets = this.getDefaultPresets();
+				await this.savePresets();
 			}
 
 			this.initialized = true;
 		} catch (error) {
 			console.error('Error initializing SettingsManager:', error);
-			throw error;
+			// In caso di errore, usa comunque i valori predefiniti
+			this.settings = this.getDefaultSettings();
+			this.presets = this.getDefaultPresets();
+			this.initialized = true;
 		}
 	}
 
@@ -138,14 +150,20 @@ export class SettingsManager {
 
 		try {
 			const exists = await window.electron.exists(this.settingsPath);
-			if (exists) {
-				const data = await window.electron.readFile(this.settingsPath);
-				return JSON.parse(data);
+			if (!exists) {
+				return null;
 			}
+			
+			const data = await window.electron.readFile(this.settingsPath);
+			if (!data.trim()) {
+				return null;
+			}
+			
+			return JSON.parse(data);
 		} catch (error) {
 			console.error('Error loading settings:', error);
+			return null;
 		}
-		return null;
 	}
 
 	private async loadPresets(): Promise<{ [key: string]: Preset } | null> {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useBlenderVersions } from "@/lib/hooks/useBlenderVersions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import {
   Button,
@@ -39,22 +40,8 @@ interface CommandBuilderProps {
 export const CommandBuilder: React.FC<CommandBuilderProps> = ({
   onCommandUpdate,
 }) => {
-  const [settingsManager, setSettingsManager] =
-    useState<SettingsManager | null>(null);
-
-  useEffect(() => {
-    // Inizializza il SettingsManager solo lato client
-    const initSettings = async () => {
-      if (typeof window !== "undefined") {
-        const settings = new SettingsManager();
-        await settings.init();
-        setSettingsManager(settings);
-      }
-    };
-
-    initSettings();
-  }, []);
-
+  const { selectedVersion } = useBlenderVersions();
+  const [settingsManager, setSettingsManager] = useState<SettingsManager | null>(null);
   const [blenderPath, setBlenderPath] = useState("");
   const [parameters, setParameters] = useState<{ [key: string]: any }>({});
   const [activePreset, setActivePreset] = useState("default");
@@ -63,13 +50,46 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
   const [isSavePresetOpen, setIsSavePresetOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
+  // Inizializza il SettingsManager
   useEffect(() => {
-    // Load saved settings solo quando settingsManager è disponibile
+    const initSettings = async () => {
+      if (typeof window !== "undefined") {
+        const settings = new SettingsManager();
+        await settings.init();
+        setSettingsManager(settings);
+      }
+    };
+    initSettings();
+  }, []);
+
+  // Gestisce l'aggiornamento del path quando cambia la versione selezionata
+  useEffect(() => {
+    if (selectedVersion) {
+      const newPath = selectedVersion.executablePath;
+      setBlenderPath(newPath);
+      updateCommand(newPath, parameters);
+      
+      // Aggiorna anche le impostazioni se il SettingsManager è disponibile
+      if (settingsManager) {
+        settingsManager.setBlenderPath(newPath);
+      }
+    }
+  }, [selectedVersion, parameters]);
+
+  // Carica le impostazioni salvate quando il SettingsManager è disponibile
+  useEffect(() => {
     if (settingsManager) {
-      setBlenderPath(settingsManager.getBlenderPath() || "");
+      // Carica il path solo se non c'è una versione selezionata
+      if (!selectedVersion) {
+        const savedPath = settingsManager.getBlenderPath();
+        setBlenderPath(savedPath || "");
+        updateCommand(savedPath || "", parameters);
+      }
+
+      // Carica i parametri
       setParameters(settingsManager.getParameters() || {});
 
-      // Carica tutti i preset disponibili
+      // Carica i preset
       const presetData: { [key: string]: Preset } = {};
       settingsManager.getPresetNames().forEach((name) => {
         const preset = settingsManager.getPreset(name);
@@ -79,54 +99,57 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
       });
       setPresets(presetData);
 
-      // Carica il preset attivo dalle impostazioni
+      // Carica il preset attivo
       const uiState = settingsManager.getUIState();
       if (uiState.activePreset && presetData[uiState.activePreset]) {
         setActivePreset(uiState.activePreset);
         const preset = presetData[uiState.activePreset];
-        setBlenderPath(preset.blenderPath || "");
+        if (!selectedVersion) {
+          setBlenderPath(preset.blenderPath || "");
+        }
         setParameters(preset.parameters || {});
       }
     }
-  }, [settingsManager]);
+  }, [settingsManager, selectedVersion]);
 
+  // Aggiorna il comando quando cambiano i parametri
   useEffect(() => {
-    updateCommand();
+    updateCommand(blenderPath, parameters);
   }, [blenderPath, parameters]);
 
-  const updateCommand = () => {
+  const updateCommand = (currentPath: string, currentParams: typeof parameters) => {
     const commandParts: string[] = [];
 
-    // Add Blender path
-    if (blenderPath) {
-      commandParts.push(quotePathIfNeeded(blenderPath));
+    // Add Blender path - usa sempre il path completo
+    if (currentPath) {
+      commandParts.push(quotePathIfNeeded(currentPath));
     } else {
       commandParts.push("blender");
     }
 
     // Handle background mode and blend file first
-    if (parameters[ParamDefinitions.BACKGROUND]) {
+    if (currentParams[ParamDefinitions.BACKGROUND]) {
       commandParts.push("-b");
-      if (parameters[ParamDefinitions.FILE]) {
-        commandParts.push(quotePathIfNeeded(parameters[ParamDefinitions.FILE]));
+      if (currentParams[ParamDefinitions.FILE]) {
+        commandParts.push(quotePathIfNeeded(currentParams[ParamDefinitions.FILE]));
       }
-    } else if (parameters[ParamDefinitions.FILE]) {
-      commandParts.push(quotePathIfNeeded(parameters[ParamDefinitions.FILE]));
+    } else if (currentParams[ParamDefinitions.FILE]) {
+      commandParts.push(quotePathIfNeeded(currentParams[ParamDefinitions.FILE]));
     }
 
     // Handle special case for output directory and filename combined into output path
-    const outputDir = parameters[ParamDefinitions.OUTPUT_DIRECTORY];
-    const outputFilename = parameters[ParamDefinitions.OUTPUT_FILENAME];
+    const outputDir = currentParams[ParamDefinitions.OUTPUT_DIRECTORY];
+    const outputFilename = currentParams[ParamDefinitions.OUTPUT_FILENAME];
 
     if (outputDir && outputFilename) {
       const combinedPath = path.join(outputDir, outputFilename);
       if (combinedPath) {
-        parameters[ParamDefinitions.RENDER_OUTPUT] = combinedPath;
+        currentParams[ParamDefinitions.RENDER_OUTPUT] = combinedPath;
       }
     }
 
     // Add other parameters in order
-    const orderedParams = Object.entries(parameters)
+    const orderedParams = Object.entries(currentParams)
       .filter(([param]) => {
         // Exclude special handled parameters
         return (
@@ -252,7 +275,6 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
     });
     setPresets(presetData);
     setActivePreset(preset.name);
-    toast.success("Preset salvato con successo");
   };
 
   const handleDeletePreset = async (name: string) => {
@@ -317,10 +339,10 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
       });
       setPresets(presetData);
       setHasChanges(false);
-      toast.success("Preset aggiornato con successo");
+      toast.success("Preset updated successfully");
     } catch (error) {
       console.error("Error updating preset:", error);
-      toast.error("Errore durante l'aggiornamento del preset");
+      toast.error("Failed to update preset");
     }
   };
 
@@ -343,6 +365,7 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
         return (
           <div className="flex gap-2">
             <Input
+              variant="faded"
               value={value || ""}
               onChange={(e) =>
                 handleParameterChange(param.param, e.target.value)
@@ -375,6 +398,7 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
         return (
           <div className="flex gap-2">
             <Input
+              variant="faded"
               value={value || ""}
               onChange={(e) =>
                 handleParameterChange(param.param, e.target.value)
@@ -407,6 +431,7 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
         return (
           <Input
             type="number"
+            variant="faded"
             value={value || ""}
             onChange={(e) => {
               const val = e.target.value === "" ? "" : parseInt(e.target.value);
@@ -439,6 +464,7 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
       default:
         return (
           <Input
+            variant="faded"
             value={value || ""}
             onChange={(e) => handleParameterChange(param.param, e.target.value)}
             placeholder={param.description}
@@ -446,6 +472,23 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
         );
     }
   };
+
+  // Disabilita il pulsante Browse per il Blender Path quando c'è una versione selezionata
+  const renderBlenderPathSection = () => (
+    <div className="space-y-2">
+      <Label>Blender Path</Label>
+      <div className="flex gap-2">
+        <Input
+          value={blenderPath}
+          variant="faded"
+          readOnly
+          isDisabled
+          placeholder={selectedVersion ? "Using selected Blender version" : "Select Blender executable"}
+        />
+        {!selectedVersion && <Button onPress={handleBlenderPathChange}>Browse</Button>}
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -494,24 +537,14 @@ export const CommandBuilder: React.FC<CommandBuilderProps> = ({
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label>Blender Path</Label>
-          <div className="flex gap-2">
-            <Input
-              value={blenderPath}
-              readOnly
-              placeholder="Select Blender executable"
-            />
-            <Button onPress={handleBlenderPathChange}>Browse</Button>
-          </div>
-        </div>
+        {renderBlenderPathSection()}
 
         <Separator />
       </div>
 
       {/* Parameters */}
       <Tabs defaultValue="Base" className="flex-1">
-        <TabsList className="justify-between w-full">
+        <TabsList className="justify-around w-full">
           {Object.keys(ParamDefinitions.getCategories()).map((category) => (
             <TabsTrigger key={category} value={category}>
               {category}

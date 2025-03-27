@@ -5,14 +5,15 @@ import { LogViewer } from "./LogViewer";
 import { PresetManager } from "./PresetManager";
 import { SavePresetDialog } from "./SavePresetDialog";
 import { Button } from "@heroui/react";
-import { Input } from "./ui/input";
+import { Input } from "@heroui/react";
 import { BlenderExecutor, RenderProgress } from "@/lib/blenderExecutor";
 import { SettingsManager, Preset } from "@/lib/settingsManager";
 import toast from "react-hot-toast";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { ScrollArea } from "./ui/scroll-area";
 import { Separator } from "./ui/separator";
-import { Combine, FolderSearch, Square } from "lucide-react";
+import { Combine, FolderSearch, Maximize2, Square } from "lucide-react";
+import { BlenderVersionSelector } from "./BlenderVersionSelector";
 
 interface LogEntry {
   timestamp: string;
@@ -278,6 +279,9 @@ export const Layout: React.FC = () => {
           {/* Left panel - Command Builder */}
           <Panel defaultSize={60} minSize={30}>
             <div className="h-full bg-surface rounded-lg border border-border overflow-hidden mr-2">
+              <div className="p-4 border-b border-border">
+                <BlenderVersionSelector />
+              </div>
               <CommandBuilder onCommandUpdate={handleCommandUpdate} />
             </div>
           </Panel>
@@ -293,16 +297,30 @@ export const Layout: React.FC = () => {
               <div className="bg-surface rounded-lg border border-border p-4 space-y-4 flex-shrink-0">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Command Preview</label>
-                  <Input
-                    value={command.join(" ")}
-                    readOnly
-                    className="font-mono"
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={command.join(" ")}
+                      variant="faded"
+                      readOnly
+                      className="font-mono"
+                    />
+                    {/* Button to toggle between input and textarea to show full command */}
+                    <Button
+                      variant="ghost"
+                      isIconOnly
+                      onPress={() => {
+                        // Logic to toggle between input and textarea
+                      }}
+                      className="text-sm"
+                    >
+                      <Maximize2 size={16} />
+                    </Button>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <Button
                     onPress={handleRender}
-                    startContent={<Combine />}
+                    startContent={<Combine size={16} />}
                     variant="shadow"
                     color="success"
                     isDisabled={
@@ -313,7 +331,7 @@ export const Layout: React.FC = () => {
                   </Button>
                   <Button
                     onPress={handleStop}
-                    startContent={<Square />}
+                    startContent={<Square size={16}/>}
                     isDisabled={!isRendering || !blenderExecutor}
                     variant="bordered"
                     color="danger"
@@ -322,7 +340,7 @@ export const Layout: React.FC = () => {
                   </Button>
                   <Button
                     onPress={handleOpenOutput}
-                    startContent={<FolderSearch />}
+                    startContent={<FolderSearch size={16}/>}
                     variant="bordered"
                     isDisabled={!command.includes("-o") || !isBrowser()}
                     color="default"

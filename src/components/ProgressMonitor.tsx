@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Progress } from "./ui/progress";
+import { Progress as ProgressNext } from "@heroui/react";
 import { RenderProgress } from "@/lib/blenderExecutor";
 import { Separator } from "./ui/separator";
 import {
@@ -117,8 +118,11 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
 
     const { frame, startFrame, totalFrames } = displayProgress;
     const framesCompleted = frame - startFrame;
-    const percentage = (framesCompleted / totalFrames) * 100;
+    const percentage = (framesCompleted / totalFrames) * 10000;
 
+    console.log(
+      `Frames Completed: ${framesCompleted}, Percentage: ${percentage}`
+    );
     return {
       percentage: Math.min(100, Math.max(0, percentage)),
       currentFrame: frame.toString(),
@@ -152,7 +156,7 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
             </span>
             {isRendering && displayProgress && (
               <span className="text-sm font-normal bg-primary/20 text-primary px-3 py-1 rounded-full">
-                {Math.round(calculateProgress().percentage)}% Complete
+                {Math.round(displayProgress.frameProgress || 0)}% Complete
               </span>
             )}
           </CardTitle>
@@ -173,39 +177,40 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                 <div className="text-xs text-text-secondary mb-1">Frames</div>
                 <div className="text-lg font-medium">
                   {calculateProgress().currentFrame}/
-                  {calculateProgress().totalFrames}
+                  {displayProgress?.totalFrames || 0}
                 </div>
               </div>
             </div>
 
-            {/* Overall Progress */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-text-primary">Overall Progress</span>
-                <span className="text-text-primary font-medium">
-                  {calculateProgress().currentFrame}/
-                  {calculateProgress().totalFrames} Frames
-                </span>
-              </div>
-              <Progress
-                value={calculateProgress().percentage}
-                className="h-2.5"
-              />
-            </div>
-
             {/* Current Frame Progress */}
-            {displayProgress?.frameProgress !== undefined && (
+            {displayProgress?.frameProgress !== undefined ? (
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-text-primary">Current Frame</span>
+                  <span className="text-text-primary">Overall Progress</span>
                   <span className="text-text-primary font-medium">
                     {displayProgress.frame} •{" "}
                     {Math.round(displayProgress.frameProgress)}% Complete
                   </span>
                 </div>
-                <Progress
+                <ProgressNext
                   value={displayProgress.frameProgress}
-                  className="h-2.5"
+                  size="md"
+                  color="primary"
+                />
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-text-primary">Overall Progress</span>
+                  <span className="text-text-primary font-medium">
+                    Waiting...
+                  </span>
+                </div>
+                <ProgressNext
+                isStriped
+                  value={100}
+                  size="md"
+                  color="default"
                 />
               </div>
             )}
@@ -220,7 +225,7 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                     {displayProgress.totalSamples}
                   </span>
                 </div>
-                <Progress
+                <ProgressNext
                   value={
                     displayProgress.currentSample &&
                     displayProgress.totalSamples
@@ -334,7 +339,13 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                     <Progress
                       value={systemUsage.cpu}
                       className="absolute inset-0"
-                      variant={systemUsage.cpu > 90 ? "danger" : "default"}
+                      variant={
+                        (systemUsage.gpu || 0) > 90
+                          ? "danger"
+                          : (systemUsage.gpu || 0) > 80
+                          ? "warning"
+                          : "default"
+                      }
                     />
                     <div className="relative z-10">
                       <div className="flex items-center justify-between">
@@ -369,7 +380,13 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                               <Progress
                                 value={usage}
                                 className="absolute inset-0"
-                                variant={usage > 90 ? "danger" : "default"}
+                                variant={
+                                  usage > 90
+                                    ? "danger"
+                                    : usage > 80
+                                    ? "warning"
+                                    : "default"
+                                }
                               />
                               <div className="relative z-10">
                                 <div className="flex items-center justify-between">
@@ -409,7 +426,11 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                       value={systemUsage.gpu || 0}
                       className="absolute inset-0"
                       variant={
-                        (systemUsage.gpu || 0) > 90 ? "danger" : "default"
+                        (systemUsage.gpu || 0) > 90
+                          ? "danger"
+                          : (systemUsage.gpu || 0) > 80
+                          ? "warning"
+                          : "default"
                       }
                     />
                     <div className="relative z-10">
@@ -438,8 +459,16 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                           }
                           className="absolute inset-0"
                           variant={
-                            systemUsage.gpuDetails.memoryUtilization > 90
+                            (systemUsage.gpuDetails.memoryUsed /
+                              systemUsage.gpuDetails.memoryTotal) *
+                              100 >
+                            90
                               ? "danger"
+                              : (systemUsage.gpuDetails.memoryUsed /
+                                  systemUsage.gpuDetails.memoryTotal) *
+                                  100 >
+                                80
+                              ? "warning"
                               : "default"
                           }
                         />
@@ -477,6 +506,8 @@ export const ProgressMonitor: React.FC<ProgressMonitorProps> = ({
                           variant={
                             systemUsage.gpuDetails.temperature > 80
                               ? "danger"
+                              : systemUsage.gpuDetails.temperature > 60
+                              ? "warning"
                               : "default"
                           }
                         />
