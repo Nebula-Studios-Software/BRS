@@ -12,7 +12,7 @@ const runningProcesses = new Map()
 // Helper function to kill a process tree (Windows-specific)
 async function killProcessTree(pid) {
   console.log(`killProcessTree chiamata con PID: ${pid}`);
-  
+
   if (process.platform === 'win32') {
     try {
       console.log(`Esecuzione taskkill su PID: ${pid}`);
@@ -20,7 +20,7 @@ async function killProcessTree(pid) {
       const { execSync } = require('child_process')
       const command = `taskkill /pid ${pid} /T /F`;
       console.log(`Comando: ${command}`);
-      
+
       try {
         execSync(command);
         console.log(`taskkill eseguito con successo per PID: ${pid}`);
@@ -40,22 +40,22 @@ async function killProcessTree(pid) {
     try {
       const proc = runningProcesses.get(pid);
       console.log(`Processo recuperato dalla mappa:`, proc ? "sì" : "no");
-      
+
       if (!proc) return false;
-      
+
       console.log(`Invio segnale SIGTERM al processo PID: ${pid}`);
       proc.kill('SIGTERM');
-      
+
       // Give it a moment to terminate gracefully
       console.log(`Attesa per terminazione graceful...`);
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       // If still running, force kill
       if (proc.killed) {
         console.log(`Processo terminato con SIGTERM`);
         return true;
       }
-      
+
       console.log(`SIGTERM fallito, tentativo con SIGKILL`);
       proc.kill('SIGKILL');
       return true;
@@ -89,11 +89,11 @@ function executeProcess(command, args) {
     });
 
     console.log(`Executing command: ${command} ${args.join(' ')}`);
-    
+
     let stdout = '';
     let stderr = '';
     const proc = execFile(command, args);
-    
+
     // Store PID immediately
     const pid = proc.pid;
     console.log(`Process started with PID: ${pid}`);
@@ -116,13 +116,13 @@ function executeProcess(command, args) {
     let stdoutBuffer = '';
     proc.stdout.on('data', (data) => {
       stdout += data;
-      
+
       // Process the output line by line
       stdoutBuffer += data;
       const lines = stdoutBuffer.split('\n');
       // Keep the last partial line in the buffer
       stdoutBuffer = lines.pop() || '';
-      
+
       // Emit each complete line
       for (const line of lines) {
         if (line.trim()) {
@@ -138,7 +138,7 @@ function executeProcess(command, args) {
 
     proc.on('close', (code) => {
       console.log(`Process exited with code: ${code}, PID was: ${proc.pid}`);
-      
+
       // Process any remaining data in the buffer
       if (stdoutBuffer.trim()) {
         ipcRenderer.send('process:output', stdoutBuffer.trim());
@@ -148,12 +148,12 @@ function executeProcess(command, args) {
       if (proc.pid) {
         runningProcesses.delete(proc.pid);
       }
-      
+
       // Return the process info so we can stop it later if needed
-      resolve({ 
-        code, 
-        stdout, 
-        stderr, 
+      resolve({
+        code,
+        stdout,
+        stderr,
         pid: pid  // Return pid directly instead of nested object
       });
     });
@@ -172,7 +172,7 @@ function executeProcess(command, args) {
 // Expose protected methods to the renderer process
 contextBridge.exposeInMainWorld('electron', {
   platform: process.platform,
-  
+
   // File system operations
   openFile: (options) => ipcRenderer.invoke('dialog:openFile', options),
   openDirectory: (options) => ipcRenderer.invoke('dialog:openDirectory', options),
@@ -181,7 +181,7 @@ contextBridge.exposeInMainWorld('electron', {
   writeFile: (filePath, data) => ipcRenderer.invoke('fs:writeFile', filePath, data),
   exists: (path) => ipcRenderer.invoke('fs:exists', path),
   mkdir: (path) => ipcRenderer.invoke('fs:mkdir', path),
-  
+
   // Process execution
   execute: async (command, args) => {
     try {
@@ -213,12 +213,12 @@ contextBridge.exposeInMainWorld('electron', {
   // Process management
   killProcess: async (pid) => {
     console.log(`killProcess chiamato con PID: ${pid}`);
-    
+
     if (!pid) {
       console.error('PID non valido');
       return false;
     }
-    
+
     try {
       if (process.platform === 'win32') {
         // Metodo diretto per Windows: usare execSync direttamente qui
@@ -273,7 +273,7 @@ contextBridge.exposeInMainWorld('electron', {
     const totalMemory = os.totalmem();
     const freeMemory = os.freemem();
     const usedMemory = totalMemory - freeMemory;
-    
+
     return {
         total: formatBytes(totalMemory),
         used: formatBytes(usedMemory),
@@ -290,12 +290,12 @@ contextBridge.exposeInMainWorld('electron', {
         });
         return acc;
       }, {});
-      
+
       // Calculate average CPU usage across all cores
-      const cpuUsage = lastCPUUsage 
+      const cpuUsage = lastCPUUsage
         ? calculateCPUUsage(lastCPUUsage, currentCPUUsage)
         : cpuInfo.cores.reduce((acc, core) => acc + core.usage, 0) / cpuInfo.count;
-      
+
       lastCPUUsage = currentCPUUsage;
 
       // Get detailed GPU info
@@ -342,7 +342,7 @@ contextBridge.exposeInMainWorld('electron', {
       }
     });
   },
-  
+
   blender: {
     detectVersions: () => ipcRenderer.invoke('blender:detect-versions'),
   }
@@ -355,7 +355,7 @@ let lastCoreUsages = [];
 function getCPUInfo() {
   const cpus = os.cpus();
   const currentCoreUsages = cpus.map(cpu => cpu.times);
-  
+
   // Calculate per-core usage
   const coreUsages = cpus.map((cpu, index) => {
     const prevTimes = lastCoreUsages[index];
@@ -379,13 +379,13 @@ function getCPUInfo() {
 
     // Calculate idle difference
     const idleDiff = timeDiffs.idle || 0;
-    
+
     // Update last measurements
     lastCoreUsages[index] = currentTimes;
 
     // Calculate usage percentage
     const usage = totalDiff === 0 ? 0 : 100 - (idleDiff / totalDiff * 100);
-    
+
     return {
       usage: Math.max(0, Math.min(100, usage)), // Ensure value is between 0-100
       times: cpu.times
@@ -401,7 +401,7 @@ function getCPUInfo() {
 
 function calculateCPUUsage(prevUsage, currentUsage) {
   if (!prevUsage) return null;
-  
+
   const timeDiffs = {};
   let totalDiff = 0;
 
@@ -413,10 +413,10 @@ function calculateCPUUsage(prevUsage, currentUsage) {
 
   // Calculate idle difference
   const idleDiff = timeDiffs.idle || 0;
-  
+
   // Calculate usage percentage
   const usage = totalDiff === 0 ? 0 : 100 - (idleDiff / totalDiff * 100);
-  
+
   return Math.max(0, Math.min(100, usage)); // Ensure value is between 0-100
 }
 
@@ -425,3 +425,23 @@ function formatBytes(bytes) {
   const gb = bytes / (1024 * 1024 * 1024);
   return `${Math.round(gb * 10) / 10}GB`;
 }
+
+// Aggiungi API per gli aggiornamenti
+contextBridge.exposeInMainWorld('updates', {
+  checkForUpdates: () => ipcRenderer.invoke('updates:check'),
+  downloadUpdate: () => ipcRenderer.invoke('updates:download'),
+  cancelDownload: () => ipcRenderer.invoke('updates:cancel'),
+  quitAndInstall: () => ipcRenderer.invoke('updates:install'),
+  onUpdateAvailable: (callback) => ipcRenderer.on('updates:available', callback),
+  onUpdateNotAvailable: (callback) => ipcRenderer.on('updates:not-available', callback),
+  onDownloadProgress: (callback) => ipcRenderer.on('updates:download-progress', callback),
+  onUpdateDownloaded: (callback) => ipcRenderer.on('updates:downloaded', callback),
+  onUpdateError: (callback) => ipcRenderer.on('updates:error', callback),
+  removeAllListeners: () => {
+    ipcRenderer.removeAllListeners('updates:available')
+    ipcRenderer.removeAllListeners('updates:not-available')
+    ipcRenderer.removeAllListeners('updates:download-progress')
+    ipcRenderer.removeAllListeners('updates:downloaded')
+    ipcRenderer.removeAllListeners('updates:error')
+  }
+})

@@ -1,12 +1,6 @@
 import React from "react";
 import { useBlenderVersions } from "@/lib/hooks/useBlenderVersions";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectItem } from "@heroui/react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@heroui/react";
 import { FolderSearch } from "lucide-react";
@@ -42,6 +36,9 @@ export function BlenderVersionSelector() {
     }
   };
 
+  // Aggiungi log per il debug
+  console.log('Selected Version:', selectedVersion);
+
   return (
     <div className="space-y-2">
       <Label>Blender Version</Label>
@@ -58,27 +55,26 @@ export function BlenderVersionSelector() {
         ) : (
           <Select
             value={selectedVersion?.version}
-            onValueChange={(version) => {
-              const selected = versions.find((v) => v.version === version);
+            defaultSelectedKeys={selectedVersion?.version ? [selectedVersion.version] : []}
+            onChange={(e) => {
+              const selected = versions.find((v) => v.version === e.target.value);
               if (selected) {
                 selectVersion(selected);
+                console.log('Version selected:', selected); // Log per il debug
               }
             }}
+            popoverProps={{
+              classNames: {
+                base: 'before:bg-default-300',
+                content: 'p-0 border-small border-divider bg-default-100 text-text-secondary',
+              },
+            }}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select Blender version">
-                {selectedVersion
-                  ? `Blender ${selectedVersion.version}`
-                  : "Select Blender version"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {versions.map((version) => (
-                <SelectItem key={version.version} value={version.version}>
-                  Blender {version.version}
-                </SelectItem>
-              ))}
-            </SelectContent>
+            {versions.map((version) => (
+              <SelectItem key={version.version} textValue={version.version}>
+                Blender {version.version}
+              </SelectItem>
+            ))}
           </Select>
         )}
         <Button

@@ -41,11 +41,15 @@ export class SettingsManager {
 	private settings: Settings;
 	private presets: { [key: string]: Preset };
 	private initialized: boolean = false;
+	private saveTimeout: NodeJS.Timeout | null = null;
+	private readonly SAVE_DELAY = 1000; // 1 secondo di delay per il debounce
 
 	constructor() {
 		const appDataPath = isBrowser() ? getAppDataPath() : '';
 
-		this.settingsPath = appDataPath ? path.join(appDataPath, 'settings.json') : '';
+		this.settingsPath = appDataPath
+			? path.join(appDataPath, 'settings.json')
+			: '';
 		this.presetsPath = appDataPath ? path.join(appDataPath, 'presets.json') : '';
 
 		// Initialize with default values
@@ -53,40 +57,79 @@ export class SettingsManager {
 		this.presets = this.getDefaultPresets();
 	}
 
+	private validateSettings(settings: Settings): boolean {
+		if (!settings || typeof settings !== 'object') return false;
+		if (!settings.uiState || typeof settings.uiState !== 'object') return false;
+		if (
+			!settings.uiState.logFilters ||
+			typeof settings.uiState.logFilters !== 'object'
+		)
+			return false;
+		return true;
+	}
+
+	private validatePreset(preset: Preset): boolean {
+		if (!preset || typeof preset !== 'object') return false;
+		if (!preset.name || typeof preset.name !== 'string') return false;
+		if (typeof preset.blenderPath !== 'string') return false;
+		if (!preset.parameters || typeof preset.parameters !== 'object') return false;
+		return true;
+	}
+
+	private debouncedSave(): void {
+		if (this.saveTimeout) {
+			clearTimeout(this.saveTimeout);
+		}
+		this.saveTimeout = setTimeout(async () => {
+			await this.saveSettings();
+			this.saveTimeout = null;
+		}, this.SAVE_DELAY);
+	}
+
 	async init(): Promise<void> {
 		if (this.initialized || !isBrowser()) return;
 
 		try {
-			// Create app directory if it doesn't exist
 			const appDataPath = getAppDataPath();
 			if (appDataPath) {
 				await window.electron.mkdir(appDataPath);
 			}
 
-			// Load settings
-			const savedSettings = await this.loadSettings();
-			if (savedSettings) {
+			const [savedSettings, savedPresets] = await Promise.all([
+				this.loadSettings(),
+				this.loadPresets(),
+			]);
+
+			if (savedSettings && this.validateSettings(savedSettings)) {
 				this.settings = { ...this.getDefaultSettings(), ...savedSettings };
 			} else {
-				// Se non ci sono impostazioni salvate, usa e salva i valori predefiniti
 				this.settings = this.getDefaultSettings();
 				await this.saveSettings();
 			}
 
-			// Load presets
-			const savedPresets = await this.loadPresets();
 			if (savedPresets) {
-				this.presets = { ...this.getDefaultPresets(), ...savedPresets };
+				const validPresets = Object.entries(savedPresets).reduce(
+					(acc, [key, preset]) => {
+						if (this.validatePreset(preset)) {
+							acc[key] = preset;
+						}
+						return acc;
+					},
+					{} as { [key: string]: Preset }
+				);
+
+				this.presets = { ...this.getDefaultPresets(), ...validPresets };
 			} else {
-				// Se non ci sono preset salvati, usa e salva i valori predefiniti
 				this.presets = this.getDefaultPresets();
 				await this.savePresets();
 			}
 
 			this.initialized = true;
 		} catch (error) {
-			console.error('Error initializing SettingsManager:', error);
-			// In caso di errore, usa comunque i valori predefiniti
+			console.error(
+				"Errore durante l'inizializzazione di SettingsManager:",
+				error
+			);
 			this.settings = this.getDefaultSettings();
 			this.presets = this.getDefaultPresets();
 			this.initialized = true;
@@ -153,12 +196,12 @@ export class SettingsManager {
 			if (!exists) {
 				return null;
 			}
-			
+
 			const data = await window.electron.readFile(this.settingsPath);
 			if (!data.trim()) {
 				return null;
 			}
-			
+
 			return JSON.parse(data);
 		} catch (error) {
 			console.error('Error loading settings:', error);
@@ -212,9 +255,12 @@ export class SettingsManager {
 		return this.settings[key];
 	}
 
-	async setSetting<K extends keyof Settings>(key: K, value: Settings[K]): Promise<void> {
+	async setSetting<K extends keyof Settings>(
+		key: K,
+		value: Settings[K]
+	): Promise<void> {
 		this.settings[key] = value;
-		await this.saveSettings();
+		this.debouncedSave();
 	}
 
 	getBlenderPath(): string {
@@ -223,7 +269,7 @@ export class SettingsManager {
 
 	async setBlenderPath(path: string): Promise<void> {
 		this.settings.blenderPath = path;
-		await this.saveSettings();
+		this.debouncedSave();
 	}
 
 	getParameters(): { [key: string]: any } {
@@ -232,7 +278,7 @@ export class SettingsManager {
 
 	async setParameters(parameters: { [key: string]: any }): Promise<void> {
 		this.settings.parameters = parameters;
-		await this.saveSettings();
+		this.debouncedSave();
 	}
 
 	getUIState(): UIState {
@@ -241,7 +287,7 @@ export class SettingsManager {
 
 	async setUIState(uiState: UIState): Promise<void> {
 		this.settings.uiState = uiState;
-		await this.saveSettings();
+		this.debouncedSave();
 	}
 
 	// Preset methods

@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
 
@@ -24,7 +25,7 @@ function getStaticBasePath() {
   if (isDev) {
     return path.join(__dirname, 'dist')
   }
-  
+
   // In production, prova diversi percorsi possibili
   const possiblePaths = [
     path.join(process.resourcesPath, 'app.asar.unpacked', 'dist'),
@@ -37,6 +38,8 @@ function getStaticBasePath() {
     console.log(`Testing static path: ${testPath}`)
     if (fs.existsSync(testPath)) {
       console.log(`Found valid static path: ${testPath}`)
+      // Aggiungi il percorso alle variabili d'ambiente
+      process.env.STATIC_PATH = testPath
       return testPath
     }
   }
@@ -66,10 +69,10 @@ async function detectBlenderVersions() {
   }
 
   const BLENDER_BASE_PATH = 'C:\\Program Files\\Blender Foundation';
-  
+
   try {
     console.log('Checking Blender installation at:', BLENDER_BASE_PATH);
-    
+
     if (!fs.existsSync(BLENDER_BASE_PATH)) {
       console.log('Blender base directory not found at:', BLENDER_BASE_PATH);
       return [];
@@ -77,22 +80,22 @@ async function detectBlenderVersions() {
 
     const dirs = fs.readdirSync(BLENDER_BASE_PATH);
     console.log('Found directories:', dirs);
-    
+
     const blenderDirs = dirs.filter(dir => {
-      const isBlenderDir = dir.startsWith('Blender') && 
+      const isBlenderDir = dir.startsWith('Blender') &&
         fs.statSync(path.join(BLENDER_BASE_PATH, dir)).isDirectory();
       return isBlenderDir;
     });
 
     const versions = blenderDirs.map(dir => {
       const execPath = path.join(BLENDER_BASE_PATH, dir, 'blender.exe');
-      
+
       if (!fs.existsSync(execPath)) {
         return null;
       }
 
       const version = dir.replace('Blender ', '');
-      
+
       return {
         version,
         path: path.join(BLENDER_BASE_PATH, dir),
@@ -100,7 +103,7 @@ async function detectBlenderVersions() {
       };
     }).filter(v => v !== null);
 
-    return versions.sort((a, b) => 
+    return versions.sort((a, b) =>
       b.version.localeCompare(a.version, undefined, { numeric: true })
     );
   } catch (error) {
@@ -108,6 +111,72 @@ async function detectBlenderVersions() {
     return [];
   }
 }
+
+// Configura l'autoUpdater
+autoUpdater.autoDownload = false;
+autoUpdater.logger = require('electron-log');
+autoUpdater.logger.transports.file.level = 'info';
+
+// Gestisci gli eventi dell'autoUpdater
+autoUpdater.on('checking-for-update', () => {
+  console.log('Checking for updates...');
+});
+
+autoUpdater.on('update-available', (info) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('updates:available', info);
+  }
+});
+
+autoUpdater.on('update-not-available', () => {
+  if (mainWindow) {
+    mainWindow.webContents.send('updates:not-available');
+  }
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('updates:download-progress', progressObj);
+  }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('updates:downloaded', info);
+  }
+});
+
+autoUpdater.on('error', (error) => {
+  console.error('Update error:', error);
+  if (mainWindow) {
+    mainWindow.webContents.send('updates:error', error.message);
+  }
+});
+
+// Gestisci le richieste IPC per gli aggiornamenti
+ipcMain.handle('updates:check', () => {
+  if (!isDev) {
+    return autoUpdater.checkForUpdates();
+  }
+});
+
+ipcMain.handle('updates:download', () => {
+  if (!isDev) {
+    return autoUpdater.downloadUpdate();
+  }
+});
+
+ipcMain.handle('updates:cancel', () => {
+  if (!isDev) {
+    return autoUpdater.cancelDownload();
+  }
+});
+
+ipcMain.handle('updates:install', () => {
+  if (!isDev) {
+    autoUpdater.quitAndInstall(false, true);
+  }
+});
 
 const createWindow = () => {
   // Create the browser window.
@@ -145,32 +214,33 @@ const createWindow = () => {
   } else {
     // In production, carica l'HTML dalla cartella dist non compressa
     const staticBasePath = getStaticBasePath()
-    console.log('Using static base path:', staticBasePath)
-    
+    console.log('Static base path:', staticBasePath)
+
     const indexPath = path.join(staticBasePath, 'index.html')
     console.log('Loading index from:', indexPath)
-    
+
     if (!fs.existsSync(indexPath)) {
       console.error('index.html not found at:', indexPath)
       app.quit()
       return
     }
-    
+
     // Leggi e modifica l'HTML per usare percorsi corretti
     let htmlContent = fs.readFileSync(indexPath, 'utf8')
-    
+
     // Sostituisci i percorsi relativi con percorsi assoluti
     const normalizedPath = staticBasePath.replace(/\\/g, '/')
     console.log('Using normalized path for replacements:', normalizedPath)
-    
-    htmlContent = htmlContent.replace(/\.\/_next\//g, `${normalizedPath}/_next/`)
-    htmlContent = htmlContent.replace(/"\/_next\//g, `"${normalizedPath}/_next/`)
-    
+
+    htmlContent = htmlContent.replace(/"\.\//g, `"${normalizedPath}/`)
+    htmlContent = htmlContent.replace(/'\.\//g, `'${normalizedPath}/`)
+    htmlContent = htmlContent.replace(/=\.\//g, `=${normalizedPath}/`)
+
     // Scrivi l'HTML modificato in un file temporaneo
     const tempPath = path.join(app.getPath('temp'), 'index.html')
     fs.writeFileSync(tempPath, htmlContent, 'utf8')
     console.log('Written modified HTML to:', tempPath)
-    
+
     // Carica il file temporaneo
     mainWindow.loadFile(tempPath)
   }
@@ -199,6 +269,13 @@ const createWindow = () => {
   mainWindow.on('closed', () => {
     cleanupProcesses();
     mainWindow = null;
+  });
+
+  // Controlla gli aggiornamenti dopo che la finestra è stata caricata
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (!isDev) {
+      autoUpdater.checkForUpdates();
+    }
   });
 }
 
