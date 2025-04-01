@@ -26,17 +26,16 @@ jobs:
           install-command: npm install --legacy-peer-deps
 
 
-      - name: Build/release Electron app
-        uses: samuelmeuli/action-electron-builder@v1
+      - name: Electron Builder
+        # You may pin to the exact commit or the version.
+        # uses: paneron/action-electron-builder@14b133702d1b2e9749912051c43ed62b4afe56c8
+        uses: paneron/action-electron-builder@v1.8.1
         with:
-          # GitHub token, automatically provided to the action
-          # (No need to define this secret in the repo settings)
+          # Whether to skip package manager install
+          skip_package_manager_install: true
+          # GitHub authentication token
           github_token: ${{ secrets.github_token }}
-
           # Name of the optional NPM build script which is executed before `electron-builder`
           build_script_name: build-all
-
-          # If the commit is tagged with a version (e.g. "v1.0.0"),
-          # release the app after building
-          # release: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          
 
