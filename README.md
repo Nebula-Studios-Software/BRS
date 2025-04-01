@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BRS v1.0.0 - Blender Render Suite by Nebula Studios 🎨
 
-## Getting Started
+## Overview
+BRS is a powerful desktop application built with Electron and Next.js that provides a modern interface for managing Blender render jobs. It offers a seamless experience for both development and production environments.
 
-First, run the development server:
+## Key Features 🚀
 
+### Render Management
+- Real-time render progress monitoring
+- Frame-by-frame tracking
+- Memory usage monitoring
+- Process management with automatic cleanup
+- Support for both Windows and Unix-based systems
+
+### Preset System
+- Save and load render presets
+- Import/export preset configurations
+- Automatic Blender detection
+- Customizable render parameters
+
+### User Interface
+- Modern, responsive design with ShadCN/UI components
+- Dark mode support
+- Drag-and-drop file handling
+- Real-time system monitoring
+- Toast notifications for important events
+
+### File Management
+- Native file system integration
+- Directory picker support
+- Automatic path handling
+- History tracking for recent operations
+
+## Technical Improvements 🛠️
+
+### Build System
+- Optimized Next.js static export
+- Reliable environment detection
+- Enhanced error handling
+- Improved logging system
+
+### Performance
+- Efficient process management
+- Optimized memory usage
+- Reduced bundle size
+- Faster startup time
+
+## System Requirements 💻
+- Windows 10/11, macOS, or Linux
+- Node.js 18 or higher
+- Blender 3.0 or higher
+
+## Installation 🚀
+1. Download the latest release for your platform
+2. Run the installer
+3. Launch BRS from the start menu/desktop shortcut
+
+## Development Setup 🔧
 ```bash
+# Install dependencies
+npm install
+
+# Run in development mode
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# Build for production
+npm run build-all
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Known Limitations ⚠️
+- Some features may be platform-specific
+- EEVEE Engine option works ONLY with Blender >= 4.0 due to changes in the Render Engine codename
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Future Roadmap 🗺️
+- Android companion app
+- More advanced render queue management
+- Custom render engine support
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Credits 👏
+- Built with Electron and Next.js
+- UI components from ShadCN/UI
+- Icons from Lucide React
+- Styling with Tailwind CSS
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
