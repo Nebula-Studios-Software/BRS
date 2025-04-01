@@ -1,0 +1,41 @@
+{
+  "appId": "com.brs.app",
+  "productName": "BRS - Blender Render Suite",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "out/**/*",
+    "electron/**/*"
+  ],
+  "mac": {
+    "category": "public.app-category.graphics-design",
+    "target": ["dmg"]
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "public/app_icon.ico"
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "icon": "public/icon.png"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "BRS",
+    "installerIcon": "public/app_icon.ico",
+    "uninstallerIcon": "public/app_icon.ico",
+    "installerHeaderIcon": "public/app_icon.ico",
+    "artifactName": "BRS-Setup-${version}.${ext}",
+    "deleteAppDataOnUninstall": true,
+    "include": "installer.nsh"
+  }
+}
