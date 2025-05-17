@@ -1,5 +1,7 @@
 # BRS v1.0.0 - Blender Render Suite by Nebula Studios 🎨
 
+![BRS](https://cdn.discordapp.com/attachments/1341431737808588868/1373338731247042711/BRS.png?ex=682a0cdc&is=6828bb5c&hm=809a9d16d3eefef1f0fd48170342c684e7d2b7f6fb439b280262f97278a41517&)
+
 ## Overview
 BRS is a powerful desktop application built with Electron and Next.js that provides a modern interface for managing Blender render jobs. It offers a seamless experience for both development and production environments.
 
