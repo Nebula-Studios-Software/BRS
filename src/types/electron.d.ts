@@ -31,6 +31,8 @@ interface SystemStats {
 		};
 		temperature: string;
 		power: string;
+		coreClock?: string;
+		memoryClock?: string;
 	}>;
 }
 
@@ -78,6 +80,13 @@ export interface ElectronAPI {
   saveHistory: (history: HistoryItem[]) => Promise<boolean>;
   loadHistory: () => Promise<HistoryItem[]>;
   showDirectoryPicker: () => Promise<string | null>;
+  // Onboarding APIs
+  getOnboardingStatus: () => Promise<{ completed: boolean }>;
+  setOnboardingCompleted: (status: boolean) => Promise<boolean>;
+  // File system APIs
+  fileExists: (filePath: string) => Promise<boolean>;
+  // Close confirmation API
+  confirmCloseApp: () => Promise<boolean>;
 }
 
 declare global {

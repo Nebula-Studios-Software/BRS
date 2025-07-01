@@ -185,11 +185,88 @@ class RenderManager {
     const renderProcess = this.processes.get(processId);
     if (renderProcess) {
       if (renderProcess.process) {
-        // Usa il PID di sistema per terminare il processo
-        renderProcess.process.kill();
+        try {
+          console.log(`Stopping individual process ${processId} (PID: ${renderProcess.process.pid})`);
+          
+          if (process.platform === 'win32') {
+            // Windows: Use taskkill to terminate the entire process tree
+            const { execSync } = require('child_process');
+            try {
+              execSync(`taskkill /pid ${renderProcess.process.pid} /T /F`, { stdio: 'ignore' });
+              console.log(`Successfully terminated process tree for PID ${renderProcess.process.pid}`);
+            } catch (error) {
+              console.error(`Error using taskkill for PID ${renderProcess.process.pid}:`, error.message);
+              // Fallback to standard kill
+              renderProcess.process.kill('SIGTERM');
+            }
+          } else {
+            // Unix-like systems
+            renderProcess.process.kill('SIGTERM');
+            
+            // Give process time to terminate gracefully, then force kill if needed
+            setTimeout(() => {
+              if (!renderProcess.process.killed) {
+                console.log(`Force killing process ${processId}`);
+                try {
+                  renderProcess.process.kill('SIGKILL');
+                } catch (error) {
+                  console.error(`Error force killing process ${processId}:`, error.message);
+                }
+              }
+            }, 2000);
+          }
+        } catch (error) {
+          console.error(`Error stopping process ${processId}:`, error.message);
+        }
       }
       this.processes.delete(processId);
     }
+  }
+
+  hasActiveRenders() {
+    return this.processes.size > 0;
+  }
+
+  stopAllRenders() {
+    console.log(`Stopping ${this.processes.size} active render processes...`);
+    
+    for (const [processId, renderProcess] of this.processes) {
+      if (renderProcess.process) {
+        try {
+          console.log(`Terminating process ${processId} (PID: ${renderProcess.process.pid})`);
+          
+          // Try graceful termination first
+          if (process.platform === 'win32') {
+            // Windows: Use taskkill to terminate the entire process tree
+            const { execSync } = require('child_process');
+            try {
+              execSync(`taskkill /pid ${renderProcess.process.pid} /T /F`, { stdio: 'ignore' });
+              console.log(`Successfully terminated process tree for PID ${renderProcess.process.pid}`);
+            } catch (error) {
+              console.error(`Error using taskkill for PID ${renderProcess.process.pid}:`, error.message);
+              // Fallback to standard kill
+              renderProcess.process.kill('SIGTERM');
+            }
+          } else {
+            // Unix-like systems: Try SIGTERM first, then SIGKILL
+            renderProcess.process.kill('SIGTERM');
+            
+            // Give process time to terminate gracefully
+            setTimeout(() => {
+              if (!renderProcess.process.killed) {
+                console.log(`Force killing process ${processId}`);
+                renderProcess.process.kill('SIGKILL');
+              }
+            }, 2000);
+          }
+        } catch (error) {
+          console.error(`Error terminating process ${processId}:`, error.message);
+        }
+      }
+    }
+    
+    this.processes.clear();
+    console.log('All render processes cleanup completed');
   }
 
   async getBlenderVersion(blenderPath) {

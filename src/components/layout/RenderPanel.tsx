@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Play, Square, RotateCcw, Timer, Frame, Layers, Cpu, Logs, Plus } from 'lucide-react';
+import { Play, Square, RotateCcw, Timer, Frame, Layers, Cpu, Logs, Plus, Monitor, Thermometer, Zap, Clock } from 'lucide-react';
 import { toast } from 'sonner';
-import { LineChart, Line, Tooltip, ResponsiveContainer } from 'recharts';
 import { useQueueStore } from '@/store/queueStore';
 import { useHistoryStore } from '@/store/historyStore';
 import { HistoryItem } from '@/types/history';
@@ -14,29 +13,12 @@ import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import HistoryPanel from './HistoryPanel';
 import { Badge } from '@/components/ui/badge';
-import LogViewer, { LogEntry, LogLevel } from './LogViewer';
+import { LogEntry, LogLevel } from './LogViewer';
 
 interface RenderPanelProps {
 	command: string;
-}
-
-interface MemoryData {
-	timestamp: number;
-	memoryUsage: number;
-	peakMemory: number;
-}
-
-interface TooltipProps {
-	active?: boolean;
-	payload?: Array<{
-		value: number;
-		payload: {
-			timestamp: number;
-			memoryUsage: number;
-			peakMemory: number;
-		};
-	}>;
-	label?: number;
+	logs: LogEntry[];
+	onAddLog: (message: string, level?: LogLevel) => void;
 }
 
 interface ProgressEventData {
@@ -51,21 +33,32 @@ interface ProgressEventData {
 	compositingOperation?: string;
 }
 
-const TIMESPAN_SECONDS = 30; // Finestra mobile di 30 secondi
+interface SystemStats {
+	cpu: {
+		usage: string;
+		cores: string[];
+	};
+	memory: {
+		used: string;
+		total: string;
+		percentage: string;
+	};
+	gpu: Array<{
+		name: string;
+		usage: string;
+		memory: {
+			used: string;
+			total: string;
+			percentage: string;
+		};
+		temperature: string;
+		power: string;
+		coreClock?: string;
+		memoryClock?: string;
+	}>;
+}
 
-const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
-	if (active && payload && payload.length) {
-		return (
-			<div className="bg-background border rounded-lg shadow-lg p-2">
-				<p className="text-xs text-muted-foreground">{new Date(label || 0).toLocaleTimeString()}</p>
-				<p className="text-xs font-medium">{`${Math.round(payload[0].value)}MB`}</p>
-			</div>
-		);
-	}
-	return null;
-};
-
-const RenderPanel: React.FC<RenderPanelProps> = ({ command }) => {
+const RenderPanel: React.FC<RenderPanelProps> = ({ command, logs, onAddLog }) => {
 	const [isRendering, setIsRendering] = useState(false);
 	const [progress, setProgress] = useState(0);
 	const [currentFrame, setCurrentFrame] = useState(0);
@@ -74,14 +67,13 @@ const RenderPanel: React.FC<RenderPanelProps> = ({ command }) => {
 	const [totalSamples, setTotalSamples] = useState(0);
 	const [inCompositing, setInCompositing] = useState(false);
 	const [compositingOperation, setCompositingOperation] = useState('');
-	const [logs, setLogs] = useState<LogEntry[]>([]);
 	const [startTime, setStartTime] = useState<Date | null>(null);
 	const [currentProcessId, setCurrentProcessId] = useState<string | null>(null);
 	const [memoryUsage, setMemoryUsage] = useState(0);
 	const [peakMemory, setPeakMemory] = useState(0);
-	const [memoryData, setMemoryData] = useState<MemoryData[]>([]);
 	const [elapsedTime, setElapsedTime] = useState(0);
 	const [queueName, setQueueName] = useState('');
+	const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
 	const addItem = useQueueStore((state) => state.addItem);
 	const addHistoryItem = useHistoryStore((state) => state.addItem);
 	const [historyOpen, setHistoryOpen] = useState(false);
@@ -105,26 +97,24 @@ const RenderPanel: React.FC<RenderPanelProps> = ({ command }) => {
 	};
 
 	const addLog = (message: string, level: LogLevel = 'info') => {
-		const timestamp = new Date().toLocaleTimeString();
-		setLogs(prev => [...prev, { timestamp, level, message }]);
+		onAddLog(message, level);
 	};
 
-	const updateMemoryData = (newMemoryUsage: number) => {
-		const now = Date.now();
-		const cutoffTime = now - (TIMESPAN_SECONDS * 1000); // 30 secondi in millisecondi
-
-		setMemoryData(prev => {
-			// Rimuovi i dati più vecchi di 30 secondi
-			const filteredData = prev.filter(data => data.timestamp >= cutoffTime);
-
-			// Aggiungi il nuovo dato
-			return [...filteredData, {
-				timestamp: now,
-				memoryUsage: newMemoryUsage,
-				peakMemory: Math.max(peakMemory, newMemoryUsage)
-			}];
+	// Add system monitoring effect
+	useEffect(() => {
+		// Start system monitoring when component mounts
+		window.electronAPI.startSystemMonitor();
+		
+		// Listen for system stats
+		window.electronAPI.onSystemStats((stats: SystemStats) => {
+			setSystemStats(stats);
 		});
-	};
+
+		// Cleanup on unmount
+		return () => {
+			window.electronAPI.stopSystemMonitor();
+		};
+	}, []);
 
 	const extractParametersFromCommand = (command: string) => {
 		// Estrai il percorso di Blender
@@ -182,7 +172,6 @@ const RenderPanel: React.FC<RenderPanelProps> = ({ command }) => {
 		setProgress(0);
 		setCurrentFrame(0);
 		setTotalFrames(0);
-		setLogs([]);
 		setStartTime(new Date());
 		setMemoryUsage(0);
 		setPeakMemory(0);
@@ -218,7 +207,6 @@ const RenderPanel: React.FC<RenderPanelProps> = ({ command }) => {
 					}
 					if ('memoryUsage' in progressData && progressData.memoryUsage !== undefined) {
 						setMemoryUsage(progressData.memoryUsage);
-						updateMemoryData(progressData.memoryUsage);
 					}
 					if ('peakMemory' in progressData && progressData.peakMemory !== undefined) {
 						setPeakMemory(progressData.peakMemory);
@@ -357,7 +345,6 @@ const RenderPanel: React.FC<RenderPanelProps> = ({ command }) => {
 		setProgress(0);
 		setCurrentFrame(0);
 		setTotalFrames(0);
-		setLogs([]);
 		setStartTime(null);
 		setElapsedTime(0);
 		setMemoryUsage(0);
@@ -367,7 +354,6 @@ const RenderPanel: React.FC<RenderPanelProps> = ({ command }) => {
 		setInCompositing(false);
 		setCompositingOperation('');
 		setCurrentProcessId(null);
-		setMemoryData([]);
 	};
 
 	const handleAddToQueue = () => {
@@ -587,53 +573,151 @@ const RenderPanel: React.FC<RenderPanelProps> = ({ command }) => {
 						<div className="space-y-4">
 							<div className="grid grid-cols-2 gap-4">
 								<div className="bg-background rounded-md p-4">
-									<h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+									<h3 className="text-sm font-medium mb-4 flex items-center gap-2">
 										<Cpu className="h-4 w-4" />
 										Current Memory Usage
 									</h3>
-									<div className="h-[100px]">
-										<ResponsiveContainer width="100%" height="100%">
-											<LineChart data={memoryData}>
-												<Tooltip content={<CustomTooltip />} />
-												<Line
-													type="monotone"
-													dataKey="memoryUsage"
-													stroke="#8884d8"
-													strokeWidth={2}
-													dot={false}
-												/>
-											</LineChart>
-										</ResponsiveContainer>
-									</div>
-									<div className="mt-2 text-sm text-muted-foreground">
-										Current: {Math.round(memoryUsage)} MB
+									<div className="space-y-2">
+										<div className="flex justify-between text-sm">
+											<span>Current: {Math.round(memoryUsage)} MB</span>
+											<span>{systemStats?.memory.percentage || '0%'}</span>
+										</div>
+										<Progress
+											value={systemStats ? parseFloat(systemStats.memory.percentage) : 0}
+											className="h-2"
+										/>
 									</div>
 								</div>
 								<div className="bg-background rounded-md p-4">
-									<h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+									<h3 className="text-sm font-medium mb-4 flex items-center gap-2">
 										<Cpu className="h-4 w-4" />
 										Peak Memory Usage
 									</h3>
-									<div className="h-[100px]">
-										<ResponsiveContainer width="100%" height="100%">
-											<LineChart data={memoryData}>
-												<Tooltip content={<CustomTooltip />} />
-												<Line
-													type="monotone"
-													dataKey="peakMemory"
-													stroke="#82ca9d"
-													strokeWidth={2}
-													dot={false}
-												/>
-											</LineChart>
-										</ResponsiveContainer>
-									</div>
-									<div className="mt-2 text-sm text-muted-foreground">
-										Peak: {Math.round(peakMemory)} MB
+									<div className="space-y-2">
+										<div className="flex justify-between text-sm">
+											<span>Peak: {Math.round(peakMemory)} MB</span>
+											<span>{systemStats?.memory.used || '0 GB'} / {systemStats?.memory.total || '0 GB'}</span>
+										</div>
+										<Progress
+											value={peakMemory > 0 ? Math.min((peakMemory / 8192) * 100, 100) : 0}
+											className="h-2"
+											variant="secondary"
+										/>
 									</div>
 								</div>
 							</div>
-							<LogViewer logs={logs} />
+
+							{/* System Information */}
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div className="bg-background rounded-md p-4">
+									<h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+										<Cpu className="h-4 w-4" />
+										CPU Information
+									</h3>
+									<div className="space-y-2">
+										<div className="flex justify-between text-sm">
+											<span>Usage:</span>
+											<span>{systemStats?.cpu.usage || '0%'}</span>
+										</div>
+										<Progress
+											value={systemStats ? parseFloat(systemStats.cpu.usage) : 0}
+											className="h-2"
+											variant="success"
+										/>
+										<div className="text-xs text-muted-foreground mt-2">
+											{systemStats?.cpu.cores.length || 0} cores available
+										</div>
+									</div>
+								</div>
+
+								<div className="bg-background rounded-md p-4">
+									<h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+										<Monitor className="h-4 w-4" />
+										System Memory
+									</h3>
+									<div className="space-y-2">
+										<div className="flex justify-between text-sm">
+											<span>Used:</span>
+											<span>{systemStats?.memory.used || '0 GB'} / {systemStats?.memory.total || '0 GB'}</span>
+										</div>
+										<Progress
+											value={systemStats ? parseFloat(systemStats.memory.percentage) : 0}
+											className="h-2"
+											variant="warning"
+										/>
+										<div className="text-xs text-muted-foreground">
+											{systemStats?.memory.percentage || '0%'} utilization
+										</div>
+									</div>
+								</div>
+							</div>
+
+							{/* GPU Information */}
+							{systemStats?.gpu && systemStats.gpu.length > 0 && (
+								<div className="space-y-4">
+									<h3 className="text-sm font-medium flex items-center gap-2">
+										<Monitor className="h-4 w-4" />
+										GPU Information
+									</h3>
+									<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+										{systemStats.gpu.map((gpu, index) => (
+											<div key={index} className="bg-background rounded-md p-4 space-y-3">
+												<div className="font-medium text-sm truncate" title={gpu.name}>
+													{gpu.name}
+												</div>
+												
+												<div className="space-y-2">
+													<div className="flex justify-between text-xs">
+														<span>GPU Usage:</span>
+														<span>{gpu.usage}</span>
+													</div>
+													<Progress
+														value={parseFloat(gpu.usage)}
+														className="h-1.5"
+														variant="success"
+													/>
+												</div>
+
+												<div className="space-y-2">
+													<div className="flex justify-between text-xs">
+														<span>VRAM:</span>
+														<span>{gpu.memory.used} / {gpu.memory.total}</span>
+													</div>
+													<Progress
+														value={parseFloat(gpu.memory.percentage)}
+														className="h-1.5"
+														variant="warning"
+													/>
+												</div>
+
+												<div className="grid grid-cols-2 gap-2 text-xs">
+													<div className="flex items-center gap-1">
+														<Thermometer className="h-3 w-3" />
+														<span>{gpu.temperature}</span>
+													</div>
+													<div className="flex items-center gap-1">
+														<Zap className="h-3 w-3" />
+														<span>{gpu.power}</span>
+													</div>
+													{gpu.coreClock && (
+														<div className="flex items-center gap-1">
+															<Clock className="h-3 w-3" />
+															<span title="Core Clock">{gpu.coreClock}</span>
+														</div>
+													)}
+													{gpu.memoryClock && (
+														<div className="flex items-center gap-1">
+															<Clock className="h-3 w-3 text-blue-400" />
+															<span title="Memory Clock">{gpu.memoryClock}</span>
+														</div>
+													)}
+												</div>
+											</div>
+										))}
+									</div>
+								</div>
+							)}
+
 						</div>
 					</CardContent>
 				</Card>

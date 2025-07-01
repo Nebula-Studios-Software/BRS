@@ -27,12 +27,54 @@ if (isDevelopment) {
         path.join(__dirname, '*.json')
       ]
     });
-  } catch (_) { console.log('Error'); }
+  } catch (_) { console.log('Error loading electron-reloader'); }
+  
+  // Add additional cleanup for development mode
+  process.on('SIGINT', () => {
+    console.log('SIGINT received in development mode, cleaning up...');
+    if (renderManager && renderManager.hasActiveRenders()) {
+      renderManager.stopAllRenders();
+    }
+    process.exit(0);
+  });
+  
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received in development mode, cleaning up...');
+    if (renderManager && renderManager.hasActiveRenders()) {
+      renderManager.stopAllRenders();
+    }
+    process.exit(0);
+  });
 }
 
 // Handle any uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
+  
+  // Ensure cleanup on uncaught exceptions
+  try {
+    if (renderManager && renderManager.hasActiveRenders()) {
+      console.log('Cleaning up processes due to uncaught exception...');
+      renderManager.stopAllRenders();
+    }
+  } catch (cleanupError) {
+    console.error('Error during cleanup in uncaught exception handler:', cleanupError);
+  }
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  
+  // Ensure cleanup on unhandled rejections
+  try {
+    if (renderManager && renderManager.hasActiveRenders()) {
+      console.log('Cleaning up processes due to unhandled rejection...');
+      renderManager.stopAllRenders();
+    }
+  } catch (cleanupError) {
+    console.error('Error during cleanup in unhandled rejection handler:', cleanupError);
+  }
 });
 
 const defaultPreset = {
@@ -100,7 +142,7 @@ function createWindow() {
   // Carica l'app in base all'ambiente
   if (isDevelopment) {
     mainWindow.loadURL('http://localhost:3000');
-    mainWindow.webContents.openDevTools();
+    // mainWindow.webContents.openDevTools();
   } else {
     // In produzione, carica i file statici
     const indexPath = path.join(__dirname, '../out/index.html');
@@ -115,6 +157,19 @@ function createWindow() {
       mainWindow.loadURL('about:blank');
     }
   }
+
+  // Handle window close event with render check
+  mainWindow.on('close', async (event) => {
+    // Check if there are any active renders
+    if (renderManager.hasActiveRenders()) {
+      // Prevent the default close action
+      event.preventDefault();
+      
+      // Send message to renderer to show the custom alert dialog
+      mainWindow.webContents.send('show-close-warning');
+    }
+    // If no active renders, allow normal close
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -143,6 +198,52 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (mainWindow === null) {
     createWindow();
+  }
+});
+
+// Critical: Handle app quit events to ensure all Blender processes are terminated
+app.on('before-quit', async (event) => {
+  console.log('App before-quit event triggered');
+  
+  // Prevent immediate quit to allow cleanup
+  event.preventDefault();
+  
+  try {
+    // Stop all active Blender processes
+    if (renderManager && renderManager.hasActiveRenders()) {
+      console.log('Terminating all active Blender processes...');
+      renderManager.stopAllRenders();
+      
+      // Give processes time to terminate gracefully
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // Stop system monitoring
+    if (systemMonitorInterval) {
+      clearInterval(systemMonitorInterval);
+      systemMonitorInterval = null;
+    }
+    
+    console.log('Cleanup completed, quitting app');
+  } catch (error) {
+    console.error('Error during app cleanup:', error);
+  }
+  
+  // Now allow the app to quit
+  app.exit(0);
+});
+
+app.on('will-quit', async (event) => {
+  console.log('App will-quit event triggered');
+  
+  // Ensure cleanup happens even if before-quit didn't run
+  try {
+    if (renderManager && renderManager.hasActiveRenders()) {
+      console.log('Final cleanup: Terminating remaining Blender processes...');
+      renderManager.stopAllRenders();
+    }
+  } catch (error) {
+    console.error('Error during final cleanup:', error);
   }
 });
 
@@ -614,5 +715,248 @@ ipcMain.handle('show-directory-picker', async () => {
   }
 });
 
+// Gestori IPC per l'onboarding
+ipcMain.handle('getOnboardingStatus', async () => {
+  try {
+    const isCompleted = store.get('onboardingCompleted', false);
+    return { completed: isCompleted };
+  } catch (error) {
+    console.error('Error getting onboarding status:', error);
+    return { completed: false };
+  }
+});
+
+ipcMain.handle('setOnboardingCompleted', async (event, completed) => {
+  try {
+    store.set('onboardingCompleted', completed);
+    return true;
+  } catch (error) {
+    console.error('Error setting onboarding completion:', error);
+    return false;
+  }
+});
+
+// File existence checker
+ipcMain.handle('file-exists', async (event, filePath) => {
+  try {
+    return fs.existsSync(filePath);
+  } catch (error) {
+    console.error('Error checking file existence:', error);
+    return false;
+  }
+});
+
 // Inizializza il renderManager
 const renderManager = new RenderManager();
+
+// Handle close confirmation response from renderer
+ipcMain.handle('confirm-close-app', async () => {
+  // Stop all active renders
+  renderManager.stopAllRenders();
+  // Force close the window
+  if (mainWindow) {
+    mainWindow.destroy();
+  }
+  return true;
+});
+
+// System monitoring variables
+let systemMonitorInterval = null;
+
+// Function to get GPU stats using Windows wmic and nvidia-smi
+async function getGPUStats() {
+  const gpuStats = [];
+  
+  if (process.platform === 'win32') {
+    try {
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      
+      // Get detailed GPU info excluding virtual monitors
+      const gpuInfoCommand = 'wmic path win32_VideoController get name,AdapterRAM,DriverVersion,Status /format:csv';
+      const { stdout: gpuInfo } = await execAsync(gpuInfoCommand);
+      
+      // Filter to exclude virtual GPUs and monitors
+      const virtualGPUKeywords = [
+        'virtual', 'monitor', 'remote', 'vnc', 'rdp', 'teamviewer',
+        'parsec', 'meta', 'desktop', 'software', 'basic', 'standard'
+      ];
+      
+      // Parse GPU info
+      const lines = gpuInfo.split('\n').filter(line => line.trim() && !line.includes('Node'));
+      const validGPUs = [];
+      
+      for (const line of lines) {
+        const parts = line.split(',');
+        if (parts.length >= 4) {
+          const adapterRAM = parseInt(parts[1]) || 0;
+          const name = (parts[3] || 'Unknown GPU').trim();
+          const status = (parts[4] || '').trim();
+          
+          // Skip if GPU name contains virtual keywords or has no memory
+          const isVirtual = virtualGPUKeywords.some(keyword =>
+            name.toLowerCase().includes(keyword.toLowerCase())
+          );
+          
+          // Only include GPUs that are OK status and have memory, and are not virtual
+          if (!isVirtual && status.toLowerCase() === 'ok' && adapterRAM > 0) {
+            validGPUs.push({ name, adapterRAM });
+          }
+        }
+      }
+      
+      // Now get real-time data for each valid GPU
+      for (const gpu of validGPUs) {
+        let gpuData = {
+          name: gpu.name,
+          usage: '0%',
+          memory: {
+            used: '0 GB',
+            total: `${Math.floor(gpu.adapterRAM / 1024 / 1024 / 1024)} GB`,
+            percentage: '0%'
+          },
+          temperature: 'N/A',
+          power: 'N/A'
+        };
+        
+        // Try to get NVIDIA GPU stats using nvidia-smi
+        if (gpu.name.toLowerCase().includes('nvidia')) {
+          try {
+            const nvidiaCommand = 'nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,clocks.gr,clocks.mem --format=csv,noheader,nounits';
+            const { stdout: nvidiaStats } = await execAsync(nvidiaCommand);
+            
+            const lines = nvidiaStats.trim().split('\n');
+            if (lines.length > 0) {
+              const stats = lines[0].split(',').map(s => s.trim());
+              if (stats.length >= 7) {
+                const usage = parseInt(stats[0]) || 0;
+                const memoryUsed = parseFloat(stats[1]) || 0;
+                const memoryTotal = parseFloat(stats[2]) || 0;
+                const temperature = parseInt(stats[3]) || 0;
+                const power = parseFloat(stats[4]) || 0;
+                const coreClock = parseInt(stats[5]) || 0;
+                const memoryClock = parseInt(stats[6]) || 0;
+                
+                gpuData = {
+                  name: gpu.name,
+                  usage: `${usage}%`,
+                  memory: {
+                    used: `${(memoryUsed / 1024).toFixed(1)} GB`,
+                    total: `${(memoryTotal / 1024).toFixed(0)} GB`,
+                    percentage: `${memoryTotal > 0 ? Math.round((memoryUsed / memoryTotal) * 100) : 0}%`
+                  },
+                  temperature: `${temperature}°C`,
+                  power: `${power.toFixed(0)}W`,
+                  coreClock: `${coreClock} MHz`,
+                  memoryClock: `${memoryClock} MHz`
+                };
+              }
+            }
+          } catch (nvidiaError) {
+            console.log('nvidia-smi not available or failed:', nvidiaError.message);
+          }
+        }
+        
+        // Try to get Intel GPU stats using Intel Arc Control (if available)
+        else if (gpu.name.toLowerCase().includes('intel')) {
+          try {
+            // For Intel GPUs, we can try to use Windows Performance Counters
+            const intelCommand = 'typeperf "\\GPU Engine(*)\\Utilization Percentage" -sc 1';
+            const { stdout: intelStats } = await execAsync(intelCommand);
+            
+            // Parse Intel GPU utilization (this is a simplified approach)
+            const utilizationMatch = intelStats.match(/(\d+\.?\d*)/);
+            if (utilizationMatch) {
+              const usage = Math.round(parseFloat(utilizationMatch[1]));
+              gpuData.usage = `${usage}%`;
+            }
+          } catch (intelError) {
+            console.log('Intel GPU monitoring not available:', intelError.message);
+          }
+        }
+        
+        // Try to get AMD GPU stats using AMD software (if available)
+        else if (gpu.name.toLowerCase().includes('amd') || gpu.name.toLowerCase().includes('radeon')) {
+          try {
+            // For AMD GPUs, try to use WMI queries for GPU performance
+            const amdCommand = 'wmic path Win32_PerfRawData_GPUPerformanceCounters_GPUEngine get Name,UtilizationPercentage /format:csv';
+            const { stdout: amdStats } = await execAsync(amdCommand);
+            
+            // This would need more sophisticated parsing for AMD GPUs
+            console.log('AMD GPU detection attempted');
+          } catch (amdError) {
+            console.log('AMD GPU monitoring not available:', amdError.message);
+          }
+        }
+        
+        gpuStats.push(gpuData);
+      }
+      
+    } catch (error) {
+      console.error('Error getting GPU stats:', error);
+    }
+  }
+  
+  // If no valid GPUs found, don't add any fallback data
+  return gpuStats;
+}
+
+// Function to get system stats
+async function getSystemStats() {
+  const cpus = os.cpus();
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+  
+  // Calculate CPU usage (simplified approach)
+  const cpuUsage = cpus.reduce((acc, cpu) => {
+    const total = Object.values(cpu.times).reduce((a, b) => a + b, 0);
+    const idle = cpu.times.idle;
+    return acc + ((total - idle) / total) * 100;
+  }, 0) / cpus.length;
+
+  // Get GPU stats
+  const gpuStats = await getGPUStats();
+
+  return {
+    cpu: {
+      usage: `${cpuUsage.toFixed(1)}%`,
+      cores: cpus.map(cpu => `${cpu.model} @ ${cpu.speed}MHz`)
+    },
+    memory: {
+      used: `${(usedMem / 1024 / 1024 / 1024).toFixed(2)} GB`,
+      total: `${(totalMem / 1024 / 1024 / 1024).toFixed(2)} GB`,
+      percentage: `${((usedMem / totalMem) * 100).toFixed(1)}%`
+    },
+    gpu: gpuStats
+  };
+}
+
+// System monitoring handlers
+ipcMain.handle('start-system-monitor', async () => {
+  if (systemMonitorInterval) {
+    clearInterval(systemMonitorInterval);
+  }
+  
+  // Send initial stats
+  if (mainWindow) {
+    const stats = await getSystemStats();
+    mainWindow.webContents.send('system-stats', stats);
+  }
+  
+  // Start monitoring every 2 seconds
+  systemMonitorInterval = setInterval(async () => {
+    if (mainWindow) {
+      const stats = await getSystemStats();
+      mainWindow.webContents.send('system-stats', stats);
+    }
+  }, 2000);
+});
+
+ipcMain.handle('stop-system-monitor', async () => {
+  if (systemMonitorInterval) {
+    clearInterval(systemMonitorInterval);
+    systemMonitorInterval = null;
+  }
+});

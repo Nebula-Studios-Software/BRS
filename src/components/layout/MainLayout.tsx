@@ -17,6 +17,14 @@ import LoadingScreen from '@/components/layout/loading-screen';
 import { Skeleton } from '../ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import QueuePanel from './QueuePanel';
+import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
+import { useOnboardingStore } from '@/store/onboardingStore';
+import { generateUniqueFilename } from '@/lib/fileUtils';
+import { CloseWarningDialog } from './CloseWarningDialog';
+import LogPanel from './LogPanel';
+import FloatingLogButton from './FloatingLogButton';
+import { LogEntry, LogLevel } from './LogViewer';
+import { useLogBuffer } from '@/hooks/useLogBuffer';
 
 const MainLayout: React.FC = () => {
 	const [settings, setSettings] = useState<Record<string, any>>({});
@@ -28,6 +36,11 @@ const MainLayout: React.FC = () => {
 	);
 	const [command, setCommand] = useState('');
 	const [progress, setProgress] = useState(0);
+	const { logs, addLog, clearLogs } = useLogBuffer();
+	const [isLogPanelVisible, setIsLogPanelVisible] = useState(false);
+
+	// Onboarding store hook
+	const { showWizard, checkOnboardingStatus } = useOnboardingStore();
 
 	useEffect(() => {
 		const initializeApp = async () => {
@@ -62,6 +75,9 @@ const MainLayout: React.FC = () => {
 
 				// Aspetta un momento per mostrare il messaggio di loading finale
 				await new Promise((resolve) => setTimeout(resolve, 1500));
+
+				// Controlla se è necessario mostrare l'onboarding
+				checkOnboardingStatusAndShow();
 			} catch (error) {
 				console.error('Error initializing app:', error);
 				toast.error('Error', {
@@ -78,7 +94,29 @@ const MainLayout: React.FC = () => {
 		initializeApp();
 	}, []);
 
-	const generateCommand = (settings: Record<string, any>) => {
+	// Funzione per controllare lo stato dell'onboarding
+	const checkOnboardingStatusAndShow = () => {
+		try {
+			const isCompleted = checkOnboardingStatus();
+			
+			if (!isCompleted) {
+				// Se l'onboarding non è mai stato completato, mostra il wizard completo
+				setTimeout(() => {
+					showWizard('welcome');
+				}, 1000); // Aspetta un momento dopo il caricamento
+			}
+			// Se l'onboarding è già stato completato, non mostrare più nulla
+			// L'utente può sempre configurare Blender tramite il selector nell'interfaccia
+		} catch (error) {
+			console.error('Error checking onboarding status:', error);
+			// In caso di errore, mostra l'onboarding per sicurezza (primo avvio)
+			setTimeout(() => {
+				showWizard('welcome');
+			}, 1000);
+		}
+	};
+
+	const generateCommand = async (settings: Record<string, any>) => {
 		if (!settings.blender_path) return '';
 
 		let command = `"${settings.blender_path}" -b`;
@@ -108,11 +146,14 @@ const MainLayout: React.FC = () => {
 				command += ` -F ${settings.output_format.toUpperCase()}`;
 			}
 
-			// Output path and filename
+			// Output path and filename with unique naming
 			const outputPath = settings.output_path || '';
 			const fileName = settings.output_filename || 'render';
-			const fullOutputPath = `${outputPath}/${fileName}`;
-			command += ` -o "${fullOutputPath}"`;
+			const baseOutputPath = `${outputPath}/${fileName}`;
+			
+			// Generate unique filename to avoid overwriting existing files
+			const uniqueOutputPath = await generateUniqueFilename(baseOutputPath, settings.output_format);
+			command += ` -o "${uniqueOutputPath}"`;
 		}
 
 		// Resolution Settings
@@ -167,46 +208,68 @@ const MainLayout: React.FC = () => {
 	};
 
 	useEffect(() => {
-		setCommand(generateCommand(settings));
+		const updateCommand = async () => {
+			const cmd = await generateCommand(settings);
+			setCommand(cmd);
+		};
+		updateCommand();
 	}, [settings]);
 
-	const handleSettingsChange = (newSettings: Record<string, any>) => {
+	const handleSettingsChange = async (newSettings: Record<string, any>) => {
 		setSettings((prevSettings) => {
 			const updatedSettings = {
 				...prevSettings,
 				...newSettings,
 			};
-			setCommand(generateCommand(updatedSettings));
+			// Update command asynchronously
+			generateCommand(updatedSettings).then(setCommand);
 			return updatedSettings;
 		});
 	};
 
-	const handlePresetSelect = (preset: Preset | null) => {
+	const handlePresetSelect = async (preset: Preset | null) => {
 		setSelectedPreset(preset);
 		if (preset) {
 			const newSettings = preset.parameters;
 			setSettings(newSettings);
-			setCommand(generateCommand(newSettings));
+			const cmd = await generateCommand(newSettings);
+			setCommand(cmd);
 		} else {
 			setSettings({});
 			setCommand('');
 		}
 	};
 
+	const handleAddLog = (message: string, level: LogLevel = 'info') => {
+		const timestamp = new Date().toLocaleTimeString();
+		addLog({ timestamp, level, message });
+	};
+
+	const handleClearLogs = () => {
+		clearLogs();
+		toast.success('Logs cleared');
+	};
+
+	const handleToggleLogPanel = () => {
+		setIsLogPanelVisible(!isLogPanelVisible);
+	};
+
 	const handleResetCommand = () => {
 		setSettings({});
 		setSelectedPreset(null);
 		setCommand('');
+		clearLogs();
 		toast.success('Command reset', {
 			description: 'Settings have been reset to default values.',
 		});
 	};
 
-	const handlePresetLoad = (preset: Preset) => {
+	const handlePresetLoad = async (preset: Preset) => {
 		const newSettings = preset.parameters;
 		setSettings(newSettings);
 		setSelectedPreset(preset);
-		setCommand(generateCommand(newSettings));
+		const cmd = await generateCommand(newSettings);
+		setCommand(cmd);
 	};
 
 	return (
@@ -300,7 +363,11 @@ const MainLayout: React.FC = () => {
 							</Panel>
 							<PanelResizeHandle className="w-2 m-2 rounded bg-border hover:bg-primary transition-colors" />
 							<Panel defaultSize={50} minSize={30}>
-								<RenderPanel command={command} />
+								<RenderPanel
+									command={command}
+									logs={logs}
+									onAddLog={handleAddLog}
+								/>
 							</Panel>
 						</PanelGroup>
 					</div>
@@ -312,8 +379,28 @@ const MainLayout: React.FC = () => {
 							onOpenDrawer={() => setIsCommandPreviewOpen(true)}
 						/>
 					</div>
+
+					{/* Log Panel */}
+					{isLogPanelVisible && (
+						<div className="border-t">
+							<LogPanel
+								logs={logs}
+								isVisible={isLogPanelVisible}
+								onToggle={handleToggleLogPanel}
+								onClear={handleClearLogs}
+								className="h-64"
+							/>
+						</div>
+					)}
 				</>
 			)}
+
+			{/* Floating Log Button */}
+			<FloatingLogButton
+				logs={logs}
+				onClick={handleToggleLogPanel}
+				isLogPanelVisible={isLogPanelVisible}
+			/>
 
 			{/* Command Preview Drawer */}
 			<CommandPreviewDrawer
@@ -322,6 +409,15 @@ const MainLayout: React.FC = () => {
 				open={isCommandPreviewOpen}
 				onOpenChange={setIsCommandPreviewOpen}
 			/>
+
+			{/* Onboarding Wizard */}
+			<OnboardingWizard
+				blenderPath={settings.blender_path}
+				onBlenderPathChange={(path) => handleSettingsChange({ blender_path: path })}
+			/>
+
+			{/* Close Warning Dialog */}
+			<CloseWarningDialog />
 
 			{/* Sonner Toaster */}
 			<Toaster theme="dark" richColors />
