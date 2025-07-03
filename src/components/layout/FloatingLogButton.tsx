@@ -27,7 +27,7 @@ const FloatingLogButton: React.FC<FloatingLogButtonProps> = ({
 
   return (
     <div className={cn(
-      "fixed bottom-6 right-6 z-40",
+      "fixed bottom-14 right-6 z-40",
       className
     )}>
       <Button

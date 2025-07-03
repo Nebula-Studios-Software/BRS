@@ -36,6 +36,28 @@ interface SystemStats {
 	}>;
 }
 
+interface MobileServerStatus {
+	isRunning: boolean;
+	port?: number;
+	connectedDevices?: number;
+	pairedDevices?: number;
+	currentPairingCode?: string;
+	networkIP?: string;
+}
+
+interface PairedDevice {
+	id: string;
+	name: string;
+	connectedAt: string;
+	lastSeen: string;
+	isConnected: boolean;
+}
+
+interface ConnectedDevice {
+	deviceId: string;
+	deviceName: string;
+}
+
 export interface ProgressEventData {
 	progress?: number;
 	currentFrame?: number;
@@ -87,6 +109,22 @@ export interface ElectronAPI {
   fileExists: (filePath: string) => Promise<boolean>;
   // Close confirmation API
   confirmCloseApp: () => Promise<boolean>;
+  
+  // Mobile Companion Server APIs
+  mobileServerStart: () => Promise<{ success: boolean; status?: MobileServerStatus; error?: string }>;
+  mobileServerStop: () => Promise<{ success: boolean; error?: string }>;
+  mobileServerStatus: () => Promise<{ success: boolean; status?: MobileServerStatus; error?: string }>;
+  generatePairingCode: () => Promise<{ success: boolean; code?: string; error?: string }>;
+  clearPairingCode: () => Promise<{ success: boolean; error?: string }>;
+  getPairedDevices: () => Promise<{ success: boolean; devices?: PairedDevice[]; error?: string }>;
+  removePairedDevice: (deviceId: string) => Promise<{ success: boolean; removed?: boolean; error?: string }>;
+  getConnectedDevices: () => Promise<{ success: boolean; devices?: ConnectedDevice[]; error?: string }>;
+  
+  // Mobile Companion Server Event Listeners
+  onMobileServerStatus: (callback: (status: MobileServerStatus) => void) => void;
+  onDevicePaired: (callback: (data: { deviceId: string; deviceName: string }) => void) => void;
+  onPairingCodeGenerated: (callback: (code: string) => void) => void;
+  onPairingCodeCleared: (callback: () => void) => void;
 }
 
 declare global {

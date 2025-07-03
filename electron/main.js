@@ -4,6 +4,7 @@ const fs = require('fs');
 const Store = require('electron-store');
 const os = require('os');
 const RenderManager = require('./renderManager');
+const MobileCompanionServer = require('./mobileCompanionServer');
 
 // Determina se siamo in modalità sviluppo basandoci sul percorso di esecuzione
 const isDevelopment = app.isPackaged === false;
@@ -222,6 +223,12 @@ app.on('before-quit', async (event) => {
     if (systemMonitorInterval) {
       clearInterval(systemMonitorInterval);
       systemMonitorInterval = null;
+    }
+    
+    // Stop mobile companion server
+    if (mobileCompanionServer) {
+      console.log('Stopping mobile companion server...');
+      await mobileCompanionServer.stop();
     }
     
     console.log('Cleanup completed, quitting app');
@@ -749,6 +756,229 @@ ipcMain.handle('file-exists', async (event, filePath) => {
 // Inizializza il renderManager
 const renderManager = new RenderManager();
 
+// Inizializza il mobile companion server
+let mobileCompanionServer = null;
+
+function initializeMobileCompanionServer() {
+  if (!mobileCompanionServer) {
+    mobileCompanionServer = new MobileCompanionServer(renderManager, store);
+    
+    // Connect renderManager events to mobileCompanionServer
+    renderManager.on('render-started', (data) => {
+      mobileCompanionServer.broadcastToClients('render-started', data);
+      
+      // Send push notification for render start
+      console.log('🚀 SENDING RENDER STARTED NOTIFICATION');
+      console.log('  - Process ID:', data.processId);
+      console.log('  - Command:', data.command?.substring(0, 50) + '...');
+      mobileCompanionServer.broadcastPushNotification({
+        title: 'Render Started 🚀',
+        body: 'Your Blender render has started processing.',
+        data: {
+          type: 'render_started',
+          processId: String(data.processId || 'unknown'),
+          startTime: String(data.startTime || new Date().toISOString()),
+          command: String(data.command?.substring(0, 100) || 'Unknown command')
+        }
+      });
+    });
+
+    renderManager.on('render-progress', (data) => {
+      mobileCompanionServer.broadcastToClients('render-progress', data);
+    });
+
+    renderManager.on('render-completed', async (data) => {
+      mobileCompanionServer.broadcastToClients('render-completed', data);
+      
+      // Send push notification for render completion
+      console.log('✅ SENDING RENDER COMPLETED NOTIFICATION');
+      console.log('  - Process ID:', data.processId);
+      console.log('  - Exit Code:', data.exitCode);
+      mobileCompanionServer.broadcastPushNotification({
+        title: 'Render Completed ✅',
+        body: 'Your Blender render has finished successfully!',
+        data: {
+          type: 'render_completed',
+          processId: String(data.processId || 'unknown'),
+          exitCode: String(data.exitCode || 0),
+          endTime: new Date().toISOString()
+        }
+      });
+      
+      // Save to history
+      try {
+        const history = await store.get('renderHistory', []);
+        const historyEntry = {
+          id: require('crypto').randomUUID(),
+          name: `Render ${new Date().toLocaleString()}`,
+          command: data.command || 'Unknown command',
+          status: 'completed',
+          startTime: data.startTime || new Date().toISOString(),
+          endTime: new Date().toISOString(),
+          duration: data.duration || 0,
+          progress: 100,
+          currentFrame: data.currentFrame || 0,
+          totalFrames: data.totalFrames || 0,
+          currentSample: data.currentSample || 0,
+          totalSamples: data.totalSamples || 0,
+          parameters: {
+            blenderVersion: data.blenderVersion || '',
+            renderEngine: data.renderEngine || '',
+            outputPath: data.outputPath || '',
+            totalFrames: data.totalFrames || 0,
+            lastUsed: new Date().toISOString(),
+          }
+        };
+        
+        const updatedHistory = [historyEntry, ...history].slice(0, 100); // Keep last 100 entries
+        await store.set('renderHistory', updatedHistory);
+      } catch (error) {
+        console.error('Failed to save to history:', error);
+      }
+    });
+
+    renderManager.on('render-stopped', async (data) => {
+      mobileCompanionServer.broadcastToClients('render-stopped', data);
+      
+      // Send push notification for render stop
+      console.log('🛑 SENDING RENDER STOPPED NOTIFICATION');
+      console.log('  - Process ID:', data.processId);
+      mobileCompanionServer.broadcastPushNotification({
+        title: 'Render Stopped 🛑',
+        body: 'Your Blender render has been stopped.',
+        data: {
+          type: 'render_stopped',
+          processId: String(data.processId || 'unknown'),
+          stopTime: new Date().toISOString()
+        }
+      });
+      
+      // Save to history
+      try {
+        const history = await store.get('renderHistory', []);
+        const historyEntry = {
+          id: require('crypto').randomUUID(),
+          name: `Render ${new Date().toLocaleString()} (Stopped)`,
+          command: data.command || 'Unknown command',
+          status: 'stopped',
+          startTime: data.startTime || new Date().toISOString(),
+          endTime: new Date().toISOString(),
+          duration: data.duration || 0,
+          progress: data.progress || 0,
+          currentFrame: data.currentFrame || 0,
+          totalFrames: data.totalFrames || 0,
+          currentSample: data.currentSample || 0,
+          totalSamples: data.totalSamples || 0,
+          parameters: {
+            blenderVersion: data.blenderVersion || '',
+            renderEngine: data.renderEngine || '',
+            outputPath: data.outputPath || '',
+            totalFrames: data.totalFrames || 0,
+            lastUsed: new Date().toISOString(),
+          }
+        };
+        
+        const updatedHistory = [historyEntry, ...history].slice(0, 100);
+        await store.set('renderHistory', updatedHistory);
+      } catch (error) {
+        console.error('Failed to save to history:', error);
+      }
+    });
+
+    renderManager.on('render-error', async (data) => {
+      mobileCompanionServer.broadcastToClients('render-error', data);
+      
+      // Send push notification for render error
+      console.log('❌ SENDING RENDER ERROR NOTIFICATION');
+      console.log('  - Process ID:', data.processId);
+      console.log('  - Error:', data.error?.substring(0, 100));
+      mobileCompanionServer.broadcastPushNotification({
+        title: 'Render Error ❌',
+        body: 'Your Blender render encountered an error and stopped.',
+        data: {
+          type: 'render_error',
+          processId: String(data.processId || 'unknown'),
+          error: String(data.error?.substring(0, 200) || 'Unknown error'),
+          errorTime: new Date().toISOString()
+        }
+      });
+      
+      // Save to history
+      try {
+        const history = await store.get('renderHistory', []);
+        const historyEntry = {
+          id: require('crypto').randomUUID(),
+          name: `Render ${new Date().toLocaleString()} (Error)`,
+          command: data.command || 'Unknown command',
+          status: 'failed',
+          startTime: data.startTime || new Date().toISOString(),
+          endTime: new Date().toISOString(),
+          duration: data.duration || 0,
+          progress: data.progress || 0,
+          currentFrame: data.currentFrame || 0,
+          totalFrames: data.totalFrames || 0,
+          currentSample: data.currentSample || 0,
+          totalSamples: data.totalSamples || 0,
+          error: data.error || 'Unknown error',
+          parameters: {
+            blenderVersion: data.blenderVersion || '',
+            renderEngine: data.renderEngine || '',
+            outputPath: data.outputPath || '',
+            totalFrames: data.totalFrames || 0,
+            lastUsed: new Date().toISOString(),
+          }
+        };
+        
+        const updatedHistory = [historyEntry, ...history].slice(0, 100);
+        await store.set('renderHistory', updatedHistory);
+      } catch (error) {
+        console.error('Failed to save to history:', error);
+      }
+    });
+    
+    // Setup event listeners
+    mobileCompanionServer.on('server-started', (data) => {
+      console.log(`Mobile Companion Server started on port ${data.port}`);
+      if (mainWindow) {
+        mainWindow.webContents.send('mobile-server-status', {
+          isRunning: true,
+          port: data.port
+        });
+      }
+    });
+
+    mobileCompanionServer.on('server-stopped', () => {
+      console.log('Mobile Companion Server stopped');
+      if (mainWindow) {
+        mainWindow.webContents.send('mobile-server-status', {
+          isRunning: false
+        });
+      }
+    });
+
+    mobileCompanionServer.on('device-paired', (data) => {
+      console.log(`New device paired: ${data.deviceName}`);
+      if (mainWindow) {
+        mainWindow.webContents.send('device-paired', data);
+      }
+    });
+
+    mobileCompanionServer.on('pairing-code-generated', (code) => {
+      console.log(`Pairing code generated: ${code}`);
+      if (mainWindow) {
+        mainWindow.webContents.send('pairing-code-generated', code);
+      }
+    });
+
+    mobileCompanionServer.on('pairing-code-cleared', () => {
+      if (mainWindow) {
+        mainWindow.webContents.send('pairing-code-cleared');
+      }
+    });
+  }
+  return mobileCompanionServer;
+}
+
 // Handle close confirmation response from renderer
 ipcMain.handle('confirm-close-app', async () => {
   // Stop all active renders
@@ -958,5 +1188,103 @@ ipcMain.handle('stop-system-monitor', async () => {
   if (systemMonitorInterval) {
     clearInterval(systemMonitorInterval);
     systemMonitorInterval = null;
+  }
+});
+
+// Mobile Companion Server IPC handlers
+ipcMain.handle('mobile-server-start', async () => {
+  try {
+    const server = initializeMobileCompanionServer();
+    await server.start();
+    return { success: true, status: server.getStatus() };
+  } catch (error) {
+    console.error('Error starting mobile companion server:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('mobile-server-stop', async () => {
+  try {
+    if (mobileCompanionServer) {
+      await mobileCompanionServer.stop();
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Error stopping mobile companion server:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('mobile-server-status', async () => {
+  try {
+    if (mobileCompanionServer) {
+      return { success: true, status: mobileCompanionServer.getStatus() };
+    }
+    return { success: true, status: { isRunning: false } };
+  } catch (error) {
+    console.error('Error getting mobile server status:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('generate-pairing-code', async () => {
+  try {
+    const server = initializeMobileCompanionServer();
+    const code = server.generatePairingCode();
+    return { success: true, code };
+  } catch (error) {
+    console.error('Error generating pairing code:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('clear-pairing-code', async () => {
+  try {
+    if (mobileCompanionServer) {
+      mobileCompanionServer.clearPairingCode();
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Error clearing pairing code:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-paired-devices', async () => {
+  try {
+    if (mobileCompanionServer) {
+      const devices = mobileCompanionServer.getPairedDevices();
+      return { success: true, devices };
+    }
+    return { success: true, devices: [] };
+  } catch (error) {
+    console.error('Error getting paired devices:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('remove-paired-device', async (_, deviceId) => {
+  try {
+    if (mobileCompanionServer) {
+      const removed = mobileCompanionServer.removePairedDevice(deviceId);
+      return { success: true, removed };
+    }
+    return { success: false, error: 'Server not initialized' };
+  } catch (error) {
+    console.error('Error removing paired device:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-connected-devices', async () => {
+  try {
+    if (mobileCompanionServer) {
+      const devices = mobileCompanionServer.getConnectedDevices();
+      return { success: true, devices };
+    }
+    return { success: true, devices: [] };
+  } catch (error) {
+    console.error('Error getting connected devices:', error);
+    return { success: false, error: error.message };
   }
 });

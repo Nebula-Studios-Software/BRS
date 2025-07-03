@@ -150,7 +150,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showDirectoryPicker: () => ipcRenderer.invoke('show-directory-picker'),
   saveHistory: (history) => ipcRenderer.invoke('save-history', history),
   loadHistory: () => ipcRenderer.invoke('load-history'),
-  confirmCloseApp: () => ipcRenderer.invoke('confirm-close-app')
+  confirmCloseApp: () => ipcRenderer.invoke('confirm-close-app'),
+  
+  // Mobile Companion Server APIs
+  mobileServerStart: () => ipcRenderer.invoke('mobile-server-start'),
+  mobileServerStop: () => ipcRenderer.invoke('mobile-server-stop'),
+  mobileServerStatus: () => ipcRenderer.invoke('mobile-server-status'),
+  generatePairingCode: () => ipcRenderer.invoke('generate-pairing-code'),
+  clearPairingCode: () => ipcRenderer.invoke('clear-pairing-code'),
+  getPairedDevices: () => ipcRenderer.invoke('get-paired-devices'),
+  removePairedDevice: (deviceId) => ipcRenderer.invoke('remove-paired-device', deviceId),
+  getConnectedDevices: () => ipcRenderer.invoke('get-connected-devices'),
+  
+  // Mobile Companion Server Event Listeners
+  onMobileServerStatus: (callback) => {
+    ipcRenderer.on('mobile-server-status', (event, data) => callback(data));
+  },
+  onDevicePaired: (callback) => {
+    ipcRenderer.on('device-paired', (event, data) => callback(data));
+  },
+  onPairingCodeGenerated: (callback) => {
+    ipcRenderer.on('pairing-code-generated', (event, code) => callback(code));
+  },
+  onPairingCodeCleared: (callback) => {
+    ipcRenderer.on('pairing-code-cleared', (event) => callback());
+  }
 });
 
 console.log('Electron API exposed to window');
