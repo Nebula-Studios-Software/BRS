@@ -1,6 +1,6 @@
 # BRS v1.0.0 - Blender Render Suite by Nebula Studios 🎨
 
-![BRS](https://cdn.discordapp.com/attachments/1341431737808588868/1373338731247042711/BRS.png?ex=682a0cdc&is=6828bb5c&hm=809a9d16d3eefef1f0fd48170342c684e7d2b7f6fb439b280262f97278a41517&)
+![BRS](https://cdn.discordapp.com/attachments/1341431737808588868/1373338731247042711/BRS.png?ex=68675a9c&is=6866091c&hm=1e8ed111ade481b416dde5d432bb742c0264cd2241ebc10070758d0178802664&)
 
 ## Overview
 
@@ -45,27 +45,11 @@ BRS is a powerful desktop application built with Electron and Next.js that provi
 - Automatic path handling
 - History tracking for recent operations
 
-## Technical Improvements 🛠️
-
-### Build System
-
-- Optimized Next.js static export
-- Reliable environment detection
-- Enhanced error handling
-- Improved logging system
-
-### Performance
-
-- Efficient process management
-- Optimized memory usage
-- Reduced bundle size
-- Faster startup time
-
 ## System Requirements 💻
 
-- Windows 10/11, macOS, or Linux
+- Windows 10/11
 - Node.js 18 or higher
-- Blender 3.0 or higher
+- Blender 4.0 or higher
 
 ## Installation 🚀
 
