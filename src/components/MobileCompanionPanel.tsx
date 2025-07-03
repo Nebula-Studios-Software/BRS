@@ -145,6 +145,7 @@ export default function MobileCompanionPanel() {
   }, [pairingCodeExpiry, currentPairingCode]);
 
   const loadServerStatus = async () => {
+    setIsLoading(true);
     try {
       const result = await window.electronAPI.mobileServerStatus();
       if (result.success && result.status) {
@@ -152,6 +153,8 @@ export default function MobileCompanionPanel() {
       }
     } catch (error) {
       console.error("Error loading server status:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -232,21 +235,18 @@ export default function MobileCompanionPanel() {
 
   const generateQRCode = async (code: string) => {
     try {
-      // Get the actual network IP address instead of localhost
-      let hostname = window.location.hostname;
+      let hostname = "localhost"; // Default to localhost
 
-      // If running on localhost/electron, try to get the real IP from server status
-      if (
-        hostname === "localhost" ||
-        hostname === "127.0.0.1" ||
-        hostname.startsWith("file://")
-      ) {
+      // If the server is running, try to get its actual network IP
+      if (serverStatus.isRunning) {
         try {
-          // Get the network IP from the mobile companion server status
           const result = await window.electronAPI.mobileServerStatus();
+          console.log("Mobile server status result:", result);
           if (
-            result.success &&
-            result.status?.networkIP &&
+            result &&
+            result.status &&
+            result.status.networkIP &&
+            result.status.networkIP !== "127.0.0.1" &&
             result.status.networkIP !== "localhost"
           ) {
             hostname = result.status.networkIP;

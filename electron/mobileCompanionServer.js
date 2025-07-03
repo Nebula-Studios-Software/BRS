@@ -1364,63 +1364,42 @@ class MobileCompanionServer extends EventEmitter {
   }
 
   getNetworkIP() {
+    this.logger.info('Attempting to find network IP...');
     const { networkInterfaces } = require('os');
     const nets = networkInterfaces();
-    
-    // Debug: log all available network interfaces
-    console.log('🔍 AVAILABLE NETWORK INTERFACES:');
-    for (const name of Object.keys(nets)) {
-      for (const net of nets[name]) {
-        if (net.family === 'IPv4') {
-          console.log(`  - ${name}: ${net.address} (internal: ${net.internal})`);
-        }
-      }
-    }
-    
-    let fallbackIP = null;
-    
-    // First, look for preferred IP ranges (common WiFi networks)
+    const results = Object.create(null);
+
     for (const name of Object.keys(nets)) {
       for (const net of nets[name]) {
         if (net.family === 'IPv4' && !net.internal) {
-          // Prefer common WiFi/LAN IP ranges
-          if (net.address.startsWith('192.168.') || 
-              net.address.startsWith('10.0.') || 
-              net.address.startsWith('172.16.')) {
-            
-            // Prefer 192.168.x.x over other ranges
-            if (net.address.startsWith('192.168.')) {
-              console.log(`🌐 SELECTED NETWORK IP: ${net.address} (interface: ${name})`);
-              return net.address;
-            }
-            
-            // Keep as fallback if no 192.168.x.x found
-            if (!fallbackIP) {
-              fallbackIP = net.address;
-            }
+          if (!results[name]) {
+            results[name] = [];
           }
+          results[name].push(net.address);
         }
       }
     }
-    
-    // If we found a fallback IP in preferred ranges, use it
-    if (fallbackIP) {
-      console.log(`🌐 SELECTED NETWORK IP: ${fallbackIP} (fallback)`);
-      return fallbackIP;
-    }
-    
-    // Last resort: use any IPv4 non-internal address
-    for (const name of Object.keys(nets)) {
-      for (const net of nets[name]) {
-        if (net.family === 'IPv4' && !net.internal) {
-          console.log(`🌐 SELECTED NETWORK IP: ${net.address} (last resort)`);
-          return net.address;
-        }
+
+    this.logger.info('Available network interfaces: ' + JSON.stringify(results, null, 2));
+
+    const priorityInterfaces = ['Ethernet', 'Wi-Fi', 'en0', 'wlan0'];
+    for (const iface of priorityInterfaces) {
+      if (results[iface]) {
+        this.logger.info(`Found priority interface '${iface}'. IP: ${results[iface][0]}`);
+        return results[iface][0];
       }
     }
     
-    console.log(`⚠️  NO NETWORK IP FOUND, using localhost`);
-    return 'localhost'; // Fallback
+    this.logger.warn('No priority interface found. Falling back to the first available one.');
+    
+    const firstInterface = Object.keys(results)[0];
+    if (firstInterface) {
+      this.logger.info(`Using fallback interface '${firstInterface}'. IP: ${results[firstInterface][0]}`);
+      return results[firstInterface][0];
+    }
+
+    this.logger.error('No suitable network interface found. Defaulting to 127.0.0.1.');
+    return '127.0.0.1';
   }
 
   getStatus() {
