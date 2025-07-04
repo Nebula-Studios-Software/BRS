@@ -2,17 +2,15 @@
   "appId": "com.brs.app",
   "productName": "BRS - Blender Render Suite",
   "directories": {
-    "output": "release/${version}"
+    "output": "release"
   },
   "files": [
     "out/**/*",
-    "electron/**/*",
-    ".env"
+    "electron/**/*"
   ],
   "mac": {
     "category": "public.app-category.graphics-design",
-    "target": ["dmg"],
-    "artifactName": "BRS-Mac-Installer-${version}.${ext}"
+    "target": ["dmg"]
   },
   "win": {
     "target": [
@@ -21,13 +19,11 @@
         "arch": ["x64"]
       }
     ],
-    "icon": "public/app_icon.ico",
-    "artifactName": "BRS-Win-Installer-${version}.${ext}"
+    "icon": "public/app_icon.ico"
   },
   "linux": {
     "target": ["AppImage", "deb"],
-    "icon": "public/icon.png",
-    "artifactName": "BRS-Linux-Installer-${version}.${ext}"
+    "icon": "public/icon.png"
   },
   "nsis": {
     "oneClick": false,

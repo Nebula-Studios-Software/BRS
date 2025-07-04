@@ -1,3 +1,6 @@
+// Load environment variables from .env file FIRST
+require('dotenv').config();
+
 const { Server } = require('socket.io');
 const { createServer } = require('http');
 const express = require('express');
@@ -153,34 +156,12 @@ class MobileCompanionServer extends EventEmitter {
         }
       }
 
-      // Determine notification priority
-      const isHighPriority = notification.data?.type === 'render_completed' || 
-                            notification.data?.type === 'render_error' ||
-                            notification.data?.type === 'error' ||
-                            notification.data?.type === 'test_push' || // Test notifications get high priority
-                            notification.title?.includes('Completed') ||
-                            notification.title?.includes('Error') ||
-                            notification.title?.includes('Failed') ||
-                            notification.title?.includes('Test Push'); // Test notifications get high priority
-
       const message = {
         notification: {
           title: notification.title,
           body: notification.body
         },
         data: stringifiedData,
-        android: {
-          priority: isHighPriority ? 'high' : 'normal',
-          notification: {
-            channel_id: isHighPriority ? 'brs_high_priority' : 'brs_default_channel',
-            priority: isHighPriority ? 'high' : 'default',
-            notification_priority: isHighPriority ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
-            visibility: 'public',
-            default_sound: true,
-            default_vibrate_timings: true,
-            default_light_settings: true
-          }
-        },
         token: token
       };
 
@@ -230,33 +211,19 @@ class MobileCompanionServer extends EventEmitter {
       return 0;
     }
 
-    // Deduplicate tokens to avoid sending multiple notifications to same device
-    const uniqueTokens = new Set();
-    const tokenToDeviceId = new Map();
-    
-    console.log('🎯 Analyzing registered devices:');
-    for (const [deviceId, token] of this.deviceTokens.entries()) {
-      console.log(`  - Device ${deviceId}: ${token.substring(0, 20)}...`);
-      if (!uniqueTokens.has(token)) {
-        uniqueTokens.add(token);
-        tokenToDeviceId.set(token, deviceId);
-        console.log(`    ✅ New unique token`);
-      } else {
-        console.log(`    ⚠️  Duplicate token (skipping to prevent double notifications)`);
-      }
+    console.log('🎯 Broadcasting to devices:');
+    for (const deviceId of this.deviceTokens.keys()) {
+      console.log(`  - ${deviceId}`);
     }
 
-    console.log(`🔍 Sending to ${uniqueTokens.size} unique tokens (from ${this.deviceTokens.size} registered devices)`);
-
     let successCount = 0;
-    for (const token of uniqueTokens) {
-      const deviceId = tokenToDeviceId.get(token);
+    for (const deviceId of this.deviceTokens.keys()) {
       const success = await this.sendPushNotification(deviceId, notification);
       if (success) successCount++;
     }
 
-    console.log(`✅ Broadcast complete: ${successCount}/${uniqueTokens.size} notifications sent successfully`);
-    this.logger.info(`Broadcast push notification sent to ${successCount}/${uniqueTokens.size} unique devices`);
+    console.log(`✅ Broadcast complete: ${successCount}/${this.deviceTokens.size} notifications sent successfully`);
+    this.logger.info(`Broadcast push notification sent to ${successCount}/${this.deviceTokens.size} devices`);
     return successCount;
   }
 
@@ -947,14 +914,51 @@ class MobileCompanionServer extends EventEmitter {
           send: (event, data) => {
             this.broadcastToClients('render-progress', { event, data });
             
-            // Note: Push notifications are handled by main.js renderManager events
-            // to avoid duplications
+            // Send push notification for important events
+            if (event === 'progress' && data.progress === 100) {
+              // Render completed
+              console.log('🎉 SENDING RENDER COMPLETE NOTIFICATION');
+              this.broadcastPushNotification({
+                title: 'Render Complete! 🎉',
+                body: 'Your Blender render has finished successfully.',
+                data: {
+                  type: 'render_complete',
+                  processId: processId.toString(),
+                  progress: String(data.progress) // Ensure it's a string
+                }
+              });
+            } else if (event === 'error') {
+              // Render error
+              console.log('❌ SENDING RENDER ERROR NOTIFICATION');
+              console.log('  - Error message:', data.message);
+              console.log('  - Message type:', typeof data.message);
+              this.broadcastPushNotification({
+                title: 'Render Error ❌',
+                body: String(data.message || 'An error occurred during rendering.'),
+                data: {
+                  type: 'render_error',
+                  processId: processId.toString(),
+                  errorMessage: String(data.message || 'Unknown error')
+                }
+              });
+            }
           }
         });
 
         this.broadcastToClients('render-started', { processId });
         
-        // Note: Push notification for render start is handled by main.js to avoid duplications
+        // Send push notification for render start
+        console.log('🎬 SENDING RENDER STARTED NOTIFICATION');
+        console.log('  - Process ID:', processId, 'Type:', typeof processId);
+        this.broadcastPushNotification({
+          title: 'Render Started 🎬',
+          body: 'Your Blender render has begun.',
+          data: {
+            type: 'render_started',
+            processId: String(processId), // Ensure it's a string
+            startTime: new Date().toISOString()
+          }
+        });
         
       } catch (error) {
         this.logger.error(`Error starting render: ${error.message}`);
@@ -989,7 +993,18 @@ class MobileCompanionServer extends EventEmitter {
         console.log('📡 Broadcasting render-stopped event with data:', stopData);
         this.broadcastToClients('render-stopped', stopData);
         
-        // Note: Push notification for render stop is handled by main.js to avoid duplications
+        // Send push notification for render stop
+        console.log('🛑 SENDING RENDER STOPPED NOTIFICATION');
+        console.log('  - Stopped by:', socket.deviceName, 'Type:', typeof socket.deviceName);
+        this.broadcastPushNotification({
+          title: 'Render Stopped 🛑',
+          body: 'Your Blender render has been stopped.',
+          data: {
+            type: 'render_stopped',
+            stoppedBy: String(socket.deviceName || 'Unknown'),
+            stopTime: new Date().toISOString()
+          }
+        });
         
       } catch (error) {
         console.log('❌ STOP RENDER ERROR:', error.message);
@@ -1070,23 +1085,6 @@ class MobileCompanionServer extends EventEmitter {
         }
 
         console.log('✅ Valid token received:', data.token.substring(0, 20) + '...');
-
-        // Remove any existing device IDs with the same token to prevent duplicates
-        const devicesToRemove = [];
-        for (const [existingDeviceId, existingToken] of this.deviceTokens.entries()) {
-          if (existingToken === data.token && existingDeviceId !== socket.deviceId) {
-            devicesToRemove.push(existingDeviceId);
-          }
-        }
-        
-        if (devicesToRemove.length > 0) {
-          console.log(`🧹 CLEANING DUPLICATE TOKENS:`);
-          for (const deviceIdToRemove of devicesToRemove) {
-            this.deviceTokens.delete(deviceIdToRemove);
-            console.log(`  - Removed duplicate device ID: ${deviceIdToRemove}`);
-          }
-          console.log(`✅ Cleaned ${devicesToRemove.length} duplicate device ID(s)`);
-        }
 
         // Store the token for this device
         this.deviceTokens.set(socket.deviceId, data.token);
