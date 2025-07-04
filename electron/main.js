@@ -6,6 +6,9 @@ const os = require('os');
 const RenderManager = require('./renderManager');
 const MobileCompanionServer = require('./mobileCompanionServer');
 
+// Load environment variables from .env file
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
 // Determina se siamo in modalità sviluppo basandoci sul percorso di esecuzione
 const isDevelopment = app.isPackaged === false;
 
@@ -758,10 +761,16 @@ const renderManager = new RenderManager();
 
 // Inizializza il mobile companion server
 let mobileCompanionServer = null;
+let renderManagerListenersInitialized = false;
 
 function initializeMobileCompanionServer() {
   if (!mobileCompanionServer) {
     mobileCompanionServer = new MobileCompanionServer(renderManager, store);
+  }
+  
+  // Register renderManager listeners only once
+  if (!renderManagerListenersInitialized) {
+    renderManagerListenersInitialized = true;
     
     // Connect renderManager events to mobileCompanionServer
     renderManager.on('render-started', (data) => {
@@ -975,7 +984,8 @@ function initializeMobileCompanionServer() {
         mainWindow.webContents.send('pairing-code-cleared');
       }
     });
-  }
+  } // End of renderManagerListenersInitialized check
+  
   return mobileCompanionServer;
 }
 
@@ -1194,9 +1204,11 @@ ipcMain.handle('stop-system-monitor', async () => {
 // Mobile Companion Server IPC handlers
 ipcMain.handle('mobile-server-start', async () => {
   try {
-    const server = initializeMobileCompanionServer();
-    await server.start();
-    return { success: true, status: server.getStatus() };
+    if (!mobileCompanionServer) {
+      mobileCompanionServer = initializeMobileCompanionServer();
+    }
+    await mobileCompanionServer.start();
+    return { success: true, status: mobileCompanionServer.getStatus() };
   } catch (error) {
     console.error('Error starting mobile companion server:', error);
     return { success: false, error: error.message };
@@ -1229,8 +1241,10 @@ ipcMain.handle('mobile-server-status', async () => {
 
 ipcMain.handle('generate-pairing-code', async () => {
   try {
-    const server = initializeMobileCompanionServer();
-    const code = server.generatePairingCode();
+    if (!mobileCompanionServer) {
+      mobileCompanionServer = initializeMobileCompanionServer();
+    }
+    const code = mobileCompanionServer.generatePairingCode();
     return { success: true, code };
   } catch (error) {
     console.error('Error generating pairing code:', error);

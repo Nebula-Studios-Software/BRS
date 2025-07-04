@@ -9,6 +9,7 @@ class RenderManager extends EventEmitter {
     super();
     this.processes = new Map();
     this.manuallyStopped = new Set(); // Track manually stopped processes
+    this.completedProcesses = new Set(); // Track completed processes to prevent double emit
     this.setupIpcHandlers();
   }
 
@@ -286,11 +287,14 @@ class RenderManager extends EventEmitter {
           this.processes.delete(processId);
           console.log(`Process ${processId} completed and removed from active processes. Remaining: ${this.processes.size}`);
           
-          // Emit completion event for mobile companion
-          this.emit('render-completed', {
-            processId,
-            exitCode: 0
-          });
+          // Emit completion event for mobile companion (only once)
+          if (!this.completedProcesses.has(processId)) {
+            this.completedProcesses.add(processId);
+            this.emit('render-completed', {
+              processId,
+              exitCode: 0
+            });
+          }
         }
       });
 
@@ -337,10 +341,14 @@ class RenderManager extends EventEmitter {
         
         // Emit completion/error event for mobile companion
         if (code === 0) {
-          this.emit('render-completed', {
-            processId,
-            exitCode: code
-          });
+          // Only emit if not already completed
+          if (!this.completedProcesses.has(processId)) {
+            this.completedProcesses.add(processId);
+            this.emit('render-completed', {
+              processId,
+              exitCode: code
+            });
+          }
         } else {
           this.emit('render-error', {
             processId,
@@ -439,6 +447,9 @@ class RenderManager extends EventEmitter {
       }
       this.processes.delete(processId);
       
+      // Clean up tracking sets
+      this.completedProcesses.delete(processId);
+      
       // Emit stopped event for mobile companion
       this.emit('render-stopped', {
         processId
@@ -466,6 +477,9 @@ class RenderManager extends EventEmitter {
       this.manuallyStopped.add(processId);
       console.log(`Process ${processId} marked as manually stopped`);
     }
+    
+    // Clean up completed processes tracking
+    this.completedProcesses.clear();
     
     for (const [processId, renderProcess] of this.processes) {
       if (renderProcess.process) {
