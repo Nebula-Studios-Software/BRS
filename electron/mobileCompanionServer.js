@@ -9,7 +9,7 @@ const helmet = require('helmet');
 const winston = require('winston');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
-const admin = require('firebase-admin');
+// Firebase removed - now using external API proxy
 
 class MobileCompanionServer extends EventEmitter {
   constructor(renderManager, store) {
@@ -29,9 +29,9 @@ class MobileCompanionServer extends EventEmitter {
     this.pairedDevices = new Map(); // deviceId -> { name, connectedAt, lastSeen }
     this.connectedClients = new Map(); // socketId -> { deviceId, socket }
     
-    // Push notifications
+    // Push notifications via external API
     this.deviceTokens = new Map(); // deviceId -> fcmToken
-    this.firebaseInitialized = false;
+    this.apiEndpoint = 'https://brs.api.nebulastudio.dev';
     
     // Setup logger
     this.logger = winston.createLogger({
@@ -50,88 +50,48 @@ class MobileCompanionServer extends EventEmitter {
     this.setupExpress();
     this.loadPairedDevices();
     this.loadDeviceTokens();
-    this.initializeFirebase();
   }
 
   /**
-   * Initialize Firebase Admin SDK for push notifications
+   * Test API connectivity for push notifications
    */
-  initializeFirebase() {
+  async testApiConnectivity() {
     try {
-      console.log('🔧 FIREBASE INITIALIZATION DEBUG:');
-      console.log('📋 Environment variables check:');
-      console.log('  - FIREBASE_PROJECT_ID:', process.env.FIREBASE_PROJECT_ID ? '✅ SET' : '❌ NOT SET');
-      console.log('  - FIREBASE_PRIVATE_KEY:', process.env.FIREBASE_PRIVATE_KEY ? '✅ SET (length: ' + process.env.FIREBASE_PRIVATE_KEY.length + ')' : '❌ NOT SET');
-      console.log('  - FIREBASE_CLIENT_EMAIL:', process.env.FIREBASE_CLIENT_EMAIL ? '✅ SET' : '❌ NOT SET');
+      console.log('🔧 TESTING API CONNECTIVITY:');
+      console.log('  - API Endpoint:', this.apiEndpoint);
       
-      // Check if Firebase is already initialized
-      if (admin.apps.length > 0) {
-        this.firebaseInitialized = true;
-        console.log('✅ Firebase Admin SDK already initialized');
-        this.logger.info('Firebase Admin SDK already initialized');
-        return;
-      }
-
-      // For development, we'll use a default service account
-      // In production, you should use a proper service account key file
-      // This is a basic setup that should work with Firebase project
-      const serviceAccount = {
-        "type": "service_account",
-        "project_id": process.env.FIREBASE_PROJECT_ID || "brs-mobile-companion",
-        "private_key": process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : null,
-        "client_email": process.env.FIREBASE_CLIENT_EMAIL || null
-      };
-
-      console.log('🔑 Service account prepared:');
-      console.log('  - project_id:', serviceAccount.project_id);
-      console.log('  - client_email:', serviceAccount.client_email ? '✅ SET' : '❌ NOT SET');
-      console.log('  - private_key:', serviceAccount.private_key ? '✅ SET (length: ' + serviceAccount.private_key.length + ')' : '❌ NOT SET');
-
-      // Only initialize if we have credentials
-      if (serviceAccount.private_key && serviceAccount.client_email) {
-        console.log('🚀 Initializing Firebase Admin SDK...');
-        
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-          projectId: serviceAccount.project_id
-        });
-        
-        this.firebaseInitialized = true;
-        console.log('✅ Firebase Admin SDK initialized successfully!');
-        console.log('🔔 Push notifications are now ENABLED');
-        this.logger.info('Firebase Admin SDK initialized successfully');
+      const response = await fetch(`${this.apiEndpoint}/api/health`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        console.log('✅ API connection successful!');
+        console.log('  - API Status:', data.api);
+        console.log('  - Firebase configured:', data.firebase?.configured);
+        console.log('  - Firebase initialized:', data.firebase?.initialized);
+        console.log('🔔 Push notifications are ENABLED via API proxy');
+        this.logger.info('API connectivity test successful - push notifications enabled');
+        return true;
       } else {
-        console.log('❌ Firebase credentials incomplete!');
-        console.log('💡 Missing credentials:');
-        if (!serviceAccount.private_key) console.log('  - FIREBASE_PRIVATE_KEY is missing');
-        if (!serviceAccount.client_email) console.log('  - FIREBASE_CLIENT_EMAIL is missing');
-        
-        this.logger.warn('Firebase credentials not found. Push notifications will be disabled.');
-        this.logger.warn('To enable push notifications, set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, and FIREBASE_CLIENT_EMAIL environment variables.');
+        console.log('❌ API connection failed:', response.status, response.statusText);
+        this.logger.warn('API connectivity test failed');
+        return false;
       }
     } catch (error) {
-      console.log('❌ Firebase initialization FAILED!');
+      console.log('❌ API connectivity test FAILED!');
       console.log('🔍 Error details:', error.message);
-      console.log('🔍 Error stack:', error.stack);
-      this.logger.error(`Failed to initialize Firebase: ${error.message}`);
-      this.firebaseInitialized = false;
+      this.logger.error(`Failed to connect to API: ${error.message}`);
+      return false;
     }
   }
 
   /**
-   * Send push notification to a specific device
+   * Send push notification to a specific device via API
    */
   async sendPushNotification(deviceId, notification) {
-    console.log('🔔 SENDING PUSH NOTIFICATION:');
+    console.log('🔔 SENDING PUSH NOTIFICATION VIA API:');
     console.log('  - Target Device ID:', deviceId);
     console.log('  - Notification:', notification);
-    console.log('  - Firebase initialized:', this.firebaseInitialized);
-    
-    if (!this.firebaseInitialized) {
-      console.log('❌ Firebase not initialized, cannot send push notification');
-      this.logger.warn('Firebase not initialized, cannot send push notification');
-      return false;
-    }
+    console.log('  - API Endpoint:', this.apiEndpoint);
 
     const token = this.deviceTokens.get(deviceId);
     console.log('🔍 Looking up token for device:', deviceId);
@@ -148,63 +108,62 @@ class MobileCompanionServer extends EventEmitter {
     }
 
     try {
-      // Convert all data values to strings for Firebase compatibility
-      const stringifiedData = {};
-      if (notification.data) {
-        for (const [key, value] of Object.entries(notification.data)) {
-          stringifiedData[key] = String(value);
-        }
-      }
-
-      const message = {
-        notification: {
-          title: notification.title,
-          body: notification.body
-        },
-        data: stringifiedData,
-        token: token
+      const payload = {
+        token: token,
+        title: notification.title,
+        body: notification.body,
+        data: notification.data || {}
       };
 
-      console.log('🚀 Sending Firebase message:', message);
+      console.log('🚀 Sending API request:', payload);
 
-      const response = await admin.messaging().send(message);
-      console.log('✅ Push notification sent successfully!');
-      console.log('  - Response:', response);
-      this.logger.info(`Push notification sent successfully: ${response}`);
-      return true;
+      const response = await fetch(`${this.apiEndpoint}/api/notifications/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        console.log('✅ Push notification sent successfully via API!');
+        console.log('  - Response:', result);
+        this.logger.info(`Push notification sent successfully: ${result.messageId}`);
+        return true;
+      } else {
+        console.log('❌ API request failed:', response.status, response.statusText);
+        console.log('  - Error details:', result);
+        this.logger.error(`Failed to send push notification via API: ${result.error}`);
+        
+        // If token is invalid, remove it
+        if (result.error && result.error.includes('registration-token-not-registered')) {
+          console.log('🗑️  Removing invalid token for device:', deviceId);
+          this.logger.info(`Removing invalid token for device ${deviceId}`);
+          this.deviceTokens.delete(deviceId);
+          this.saveDeviceTokens();
+        }
+        
+        return false;
+      }
     } catch (error) {
-      console.log('❌ Failed to send push notification!');
-      console.log('🔍 Error code:', error.code);
+      console.log('❌ Failed to send push notification via API!');
       console.log('🔍 Error message:', error.message);
       console.log('🔍 Full error:', error);
-      this.logger.error(`Failed to send push notification: ${error.message}`);
-      
-      // If token is invalid, remove it
-      if (error.code === 'messaging/registration-token-not-registered') {
-        console.log('🗑️  Removing invalid token for device:', deviceId);
-        this.logger.info(`Removing invalid token for device ${deviceId}`);
-        this.deviceTokens.delete(deviceId);
-        this.saveDeviceTokens();
-      }
-      
+      this.logger.error(`Failed to send push notification via API: ${error.message}`);
       return false;
     }
   }
 
   /**
-   * Send push notification to all connected devices
+   * Send push notification to all connected devices via API
    */
   async broadcastPushNotification(notification) {
-    console.log('📢 BROADCASTING PUSH NOTIFICATION:');
+    console.log('📢 BROADCASTING PUSH NOTIFICATION VIA API:');
     console.log('  - Notification:', notification);
-    console.log('  - Firebase initialized:', this.firebaseInitialized);
+    console.log('  - API Endpoint:', this.apiEndpoint);
     console.log('  - Registered devices count:', this.deviceTokens.size);
-    
-    if (!this.firebaseInitialized) {
-      console.log('❌ Firebase not initialized, cannot broadcast push notification');
-      this.logger.warn('Firebase not initialized, cannot broadcast push notification');
-      return 0;
-    }
 
     if (this.deviceTokens.size === 0) {
       console.log('❌ No registered devices for push notifications');
@@ -216,15 +175,48 @@ class MobileCompanionServer extends EventEmitter {
       console.log(`  - ${deviceId}`);
     }
 
-    let successCount = 0;
-    for (const deviceId of this.deviceTokens.keys()) {
-      const success = await this.sendPushNotification(deviceId, notification);
-      if (success) successCount++;
-    }
+    try {
+      // Get all tokens
+      const tokens = Array.from(this.deviceTokens.values());
+      
+      const payload = {
+        tokens: tokens,
+        title: notification.title,
+        body: notification.body,
+        data: notification.data || {}
+      };
 
-    console.log(`✅ Broadcast complete: ${successCount}/${this.deviceTokens.size} notifications sent successfully`);
-    this.logger.info(`Broadcast push notification sent to ${successCount}/${this.deviceTokens.size} devices`);
-    return successCount;
+      console.log('🚀 Sending broadcast API request:', payload);
+
+      const response = await fetch(`${this.apiEndpoint}/api/notifications/broadcast`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        console.log('✅ Broadcast notification sent successfully via API!');
+        console.log(`  - Success count: ${result.successCount}/${tokens.length}`);
+        console.log('  - Response:', result);
+        this.logger.info(`Broadcast push notification sent to ${result.successCount}/${tokens.length} devices`);
+        return result.successCount;
+      } else {
+        console.log('❌ Broadcast API request failed:', response.status, response.statusText);
+        console.log('  - Error details:', result);
+        this.logger.error(`Failed to broadcast push notification via API: ${result.error}`);
+        return 0;
+      }
+    } catch (error) {
+      console.log('❌ Failed to broadcast push notification via API!');
+      console.log('🔍 Error message:', error.message);
+      console.log('🔍 Full error:', error);
+      this.logger.error(`Failed to broadcast push notification via API: ${error.message}`);
+      return 0;
+    }
   }
 
   /**
@@ -1074,7 +1066,7 @@ class MobileCompanionServer extends EventEmitter {
         console.log('  - Device Name:', socket.deviceName);
         console.log('  - Device ID:', socket.deviceId);
         console.log('  - Received data:', data);
-        console.log('  - Firebase initialized:', this.firebaseInitialized);
+        console.log('  - API Endpoint:', this.apiEndpoint);
         
         this.logger.info(`Push token registration from ${socket.deviceName}`);
         
@@ -1128,13 +1120,15 @@ class MobileCompanionServer extends EventEmitter {
         
         this.logger.info(`Test push notification request from ${socket.deviceName}`);
         
-        if (!this.firebaseInitialized) {
-          console.log('❌ Firebase not initialized for test');
-          socket.emit('error', { message: 'Push notifications not configured' });
+        // Test API connectivity before sending notification
+        const apiAvailable = await this.testApiConnectivity();
+        if (!apiAvailable) {
+          console.log('❌ API not available for test');
+          socket.emit('error', { message: 'Push notification API not available' });
           return;
         }
 
-        // Convert all data values to strings for Firebase compatibility
+        // Prepare test data for API
         console.log('🔍 TEST DATA DEBUG:');
         console.log('  - Original data.data:', data.data);
         console.log('  - data.data type:', typeof data.data);
@@ -1175,10 +1169,10 @@ class MobileCompanionServer extends EventEmitter {
           });
         } else {
           console.log('❌ Failed to send test push notification');
-          console.log('🔍 Checking Firebase errors in sendPushNotification logs above...');
+          console.log('🔍 Checking API errors in sendPushNotification logs above...');
           socket.emit('test-push-result', { 
             success: false, 
-            message: 'Failed to send test push notification - check desktop console for Firebase errors',
+            message: 'Failed to send test push notification - check desktop console for API errors',
             error: 'Push notification delivery failed'
           });
         }
