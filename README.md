@@ -1,6 +1,6 @@
 # BRS v1.0.0 - Blender Render Suite by Nebula Studios 🎨
 
-![BRS](https://cdn.discordapp.com/attachments/1341431737808588868/1373338731247042711/BRS.png?ex=68675a9c&is=6866091c&hm=1e8ed111ade481b416dde5d432bb742c0264cd2241ebc10070758d0178802664&)
+![BRS](https://i.ibb.co/Gv1vrsdF/BRS.png)
 
 ## Overview
 
