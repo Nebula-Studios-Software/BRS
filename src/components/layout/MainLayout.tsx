@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Terminal, User, Smartphone } from "lucide-react";
 import BlenderPathSelector from "./BlenderPathSelector";
 import { Preset } from "@/types/preset";
-import { toast, Toaster } from "sonner";
+import { toast } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 import LoadingScreen from "@/components/layout/loading-screen";
 import { Skeleton } from "../ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
@@ -23,7 +24,6 @@ import { useOnboardingStore } from "@/store/onboardingStore";
 import { generateUniqueFilename } from "@/lib/fileUtils";
 import { CloseWarningDialog } from "./CloseWarningDialog";
 import LogPanel from "./LogPanel";
-import FloatingLogButton from "./FloatingLogButton";
 import { LogEntry, LogLevel } from "./LogViewer";
 import { useLogBuffer } from "@/hooks/useLogBuffer";
 import MobileCompanionPanel from "../MobileCompanionPanel";
@@ -62,9 +62,6 @@ const MainLayout: React.FC = () => {
         if (lastPreset) {
           setSelectedPreset(lastPreset);
           setSettings(lastPreset.parameters);
-          toast.success("Last preset loaded", {
-            description: `Loaded preset: ${lastPreset.name}`,
-          });
         }
         // Primo messaggio dopo 200ms
         setTimeout(() => {
@@ -318,7 +315,7 @@ const MainLayout: React.FC = () => {
           <div className="flex items-center justify-between border-b bg-card/95 backdrop-blur-sm px-4 py-2">
             <div className="flex items-center gap-2">
               <Avatar>
-                <AvatarImage src="https://cdn.discordapp.com/attachments/1341431737808588868/1355391231336906863/icon.png?ex=67e8c1f3&is=67e77073&hm=f502d226bd5bb3b6a554f0580c787021123488e12d4760433136e43db4b23362&" />
+                <AvatarImage src="/logo.png" alt="BRS Logo" />
                 <AvatarFallback>
                   <User className="h-4 w-4" />
                 </AvatarFallback>
@@ -383,23 +380,45 @@ const MainLayout: React.FC = () => {
 
           {/* Main Content */}
           <div className="flex-1 overflow-hidden p-2">
-            <PanelGroup direction="horizontal">
-              <Panel defaultSize={50} minSize={30}>
-                <div className="h-full">
-                  <SettingsPanel
-                    currentSettings={settings}
-                    onSettingsChange={handleSettingsChange}
-                  />
-                </div>
+            <PanelGroup direction="vertical">
+              <Panel defaultSize={isLogPanelVisible ? 70 : 100} minSize={50}>
+                <PanelGroup direction="horizontal">
+                  <Panel defaultSize={50} minSize={30}>
+                    <div className="h-full">
+                      <SettingsPanel
+                        currentSettings={settings}
+                        onSettingsChange={handleSettingsChange}
+                      />
+                    </div>
+                  </Panel>
+                  <PanelResizeHandle className="w-2 m-2 rounded bg-border hover:bg-primary transition-colors" />
+                  <Panel defaultSize={50} minSize={30}>
+                    <RenderPanel
+                      command={command}
+                      logs={logs}
+                      onAddLog={handleAddLog}
+                      onToggleLogPanel={handleToggleLogPanel}
+                      isLogPanelVisible={isLogPanelVisible}
+                    />
+                  </Panel>
+                </PanelGroup>
               </Panel>
-              <PanelResizeHandle className="w-2 m-2 rounded bg-border hover:bg-primary transition-colors" />
-              <Panel defaultSize={50} minSize={30}>
-                <RenderPanel
-                  command={command}
-                  logs={logs}
-                  onAddLog={handleAddLog}
-                />
-              </Panel>
+
+              {/* Log Panel - Resizable */}
+              {isLogPanelVisible && (
+                <>
+                  <PanelResizeHandle className="h-2 mt-2 mb-2 rounded bg-border hover:bg-primary transition-colors" />
+                  <Panel defaultSize={50} minSize={15} maxSize={60}>
+                    <LogPanel
+                      logs={logs}
+                      isVisible={isLogPanelVisible}
+                      onToggle={handleToggleLogPanel}
+                      onClear={handleClearLogs}
+                      className="h-full"
+                    />
+                  </Panel>
+                </>
+              )}
             </PanelGroup>
           </div>
 
@@ -411,60 +430,29 @@ const MainLayout: React.FC = () => {
             />
           </div>
 
-          {/* Log Panel */}
-          {isLogPanelVisible && (
-            <div className="border-t">
-              <LogPanel
-                logs={logs}
-                isVisible={isLogPanelVisible}
-                onToggle={handleToggleLogPanel}
-                onClear={handleClearLogs}
-                className="h-64"
-              />
-            </div>
-          )}
+          {/* Command Preview Drawer */}
+          <CommandPreviewDrawer
+            command={command}
+            onReset={handleResetCommand}
+            open={isCommandPreviewOpen}
+            onOpenChange={setIsCommandPreviewOpen}
+          />
+
+          {/* Onboarding Wizard */}
+          <OnboardingWizard
+            blenderPath={settings.blender_path}
+            onBlenderPathChange={(path) =>
+              handleSettingsChange({ blender_path: path })
+            }
+          />
+
+          {/* Close Warning Dialog */}
+          <CloseWarningDialog />
+
+          {/* Sonner Toaster */}
+          <Toaster />
         </>
       )}
-
-      {/* Floating Log Button */}
-      <FloatingLogButton
-        logs={logs}
-        onClick={handleToggleLogPanel}
-        isLogPanelVisible={isLogPanelVisible}
-      />
-
-      {/* Command Preview Drawer */}
-      <CommandPreviewDrawer
-        command={command}
-        onReset={handleResetCommand}
-        open={isCommandPreviewOpen}
-        onOpenChange={setIsCommandPreviewOpen}
-      />
-
-      {/* Onboarding Wizard */}
-      <OnboardingWizard
-        blenderPath={settings.blender_path}
-        onBlenderPathChange={(path) =>
-          handleSettingsChange({ blender_path: path })
-        }
-      />
-
-      {/* Close Warning Dialog */}
-      <CloseWarningDialog />
-
-      {/* Sonner Toaster */}
-      <Toaster
-        theme="dark"
-        richColors
-        position="top-left"
-        toastOptions={{
-          style: {
-            background: "hsl(var(--background))",
-            border: "1px solid hsl(var(--border))",
-            color: "hsl(var(--foreground))",
-          },
-        }}
-      />
     </div>
   );
 };

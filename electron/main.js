@@ -147,12 +147,12 @@ function createWindow() {
   } else {
     // In produzione, carica i file statici
     const indexPath = path.join(__dirname, '../out/index.html');
-    console.log('Tentativo di caricamento da:', indexPath);
-    console.log('isDevelopment:', isDevelopment);
+    // console.log('Tentativo di caricamento da:', indexPath);
+    // console.log('isDevelopment:', isDevelopment);
 
     if (fs.existsSync(indexPath)) {
       mainWindow.loadFile(indexPath);
-      console.log('File index.html trovato e caricato');
+      // console.log('File index.html trovato e caricato');
     } else {
       console.error('File index.html non trovato in:', indexPath);
       mainWindow.loadURL('about:blank');
@@ -1007,10 +1007,16 @@ async function getGPUStats() {
       const gpuInfoCommand = 'wmic path win32_VideoController get name,AdapterRAM,DriverVersion,Status /format:csv';
       const { stdout: gpuInfo } = await execAsync(gpuInfoCommand);
       
-      // Filter to exclude virtual GPUs and monitors
+      // Filter to exclude virtual GPUs, monitors, and integrated graphics
       const virtualGPUKeywords = [
         'virtual', 'monitor', 'remote', 'vnc', 'rdp', 'teamviewer',
         'parsec', 'meta', 'desktop', 'software', 'basic', 'standard'
+      ];
+      
+      // Filter to exclude integrated graphics (common patterns)
+      const integratedGPUKeywords = [
+        'uhd graphics', 'hd graphics', 'iris', 'vega', 'radeon graphics',
+        'integrated', 'onboard', 'chipset', 'shared', 'family'
       ];
       
       // Parse GPU info
@@ -1029,9 +1035,17 @@ async function getGPUStats() {
             name.toLowerCase().includes(keyword.toLowerCase())
           );
           
-          // Only include GPUs that are OK status and have memory, and are not virtual
-          if (!isVirtual && status.toLowerCase() === 'ok' && adapterRAM > 0) {
+          // Skip if GPU is integrated graphics
+          const isIntegrated = integratedGPUKeywords.some(keyword =>
+            name.toLowerCase().includes(keyword.toLowerCase())
+          );
+          
+          // Only include GPUs that are OK status, have memory, are not virtual, and are not integrated
+          if (!isVirtual && !isIntegrated && status.toLowerCase() === 'ok' && adapterRAM > 0) {
             validGPUs.push({ name, adapterRAM });
+            // console.log(`[BRS] Valid discrete GPU found: ${name} (${Math.floor(adapterRAM / 1024 / 1024 / 1024)} GB)`);
+          } else if (isIntegrated) {
+            // console.log(`[BRS] Integrated GPU filtered out: ${name}`);
           }
         }
       }
@@ -1175,13 +1189,13 @@ ipcMain.handle('start-system-monitor', async () => {
     mainWindow.webContents.send('system-stats', stats);
   }
   
-  // Start monitoring every 2 seconds
+  // Start monitoring every 0.5 seconds
   systemMonitorInterval = setInterval(async () => {
     if (mainWindow) {
       const stats = await getSystemStats();
       mainWindow.webContents.send('system-stats', stats);
     }
-  }, 2000);
+  }, 1000);
 });
 
 ipcMain.handle('stop-system-monitor', async () => {

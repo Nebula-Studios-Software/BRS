@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { FolderOpen, Search } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { FolderOpen, Search } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from 'sonner';
+import { toast } from "sonner";
 
 interface BlenderPathSelectorProps {
   value: string | undefined;
@@ -22,11 +22,16 @@ interface BlenderVersion {
   version: string;
 }
 
-const BlenderPathSelector: React.FC<BlenderPathSelectorProps> = ({ value = '', onChange }) => {
+const BlenderPathSelector: React.FC<BlenderPathSelectorProps> = ({
+  value = "",
+  onChange,
+}) => {
   const [isDetecting, setIsDetecting] = useState(false);
-  const [availableVersions, setAvailableVersions] = useState<BlenderVersion[]>([]);
+  const [availableVersions, setAvailableVersions] = useState<BlenderVersion[]>(
+    []
+  );
 
-  const detectBlender = async () => {
+  const detectBlender = async (showNotification = false) => {
     setIsDetecting(true);
     try {
       const result = await window.electronAPI.detectBlender();
@@ -36,40 +41,50 @@ const BlenderPathSelector: React.FC<BlenderPathSelectorProps> = ({ value = '', o
         if (!value) {
           onChange(result[0].path);
         }
-        toast.success("Blender versions detected", {
-          description: `Found ${result.length} Blender installation(s)`,
-        });
-      } else {
+        if (showNotification) {
+          toast.success("Blender versions detected", {
+            description: `Found ${result.length} Blender installation(s)`,
+          });
+        }
+      } else if (showNotification) {
         toast.error("Blender not found", {
-          description: "Could not find Blender installation. Please select it manually.",
+          description:
+            "Could not find Blender installation. Please select it manually.",
         });
       }
     } catch (error) {
-      toast.error("Error", {
-        description: "Failed to detect Blender installation.",
-      });
-      console.error('Error detecting Blender:', error);
+      if (showNotification) {
+        toast.error("Error", {
+          description: "Failed to detect Blender installation.",
+        });
+      }
+      console.error("Error detecting Blender:", error);
     } finally {
       setIsDetecting(false);
     }
   };
 
-  // Esegui l'autodetect all'avvio del componente
+  // Esegui l'autodetect all'avvio del componente (silenzioso)
   useEffect(() => {
-    detectBlender();
+    detectBlender(false);
   }, []);
 
   const handleManualSelect = async () => {
     try {
       const result = await window.electronAPI.openFileDialog({
-        filters: [{ name: 'Blender Executable', extensions: ['exe', 'app', 'blender'] }]
+        filters: [
+          { name: "Blender Executable", extensions: ["exe", "app", "blender"] },
+        ],
       });
       if (result && result.length > 0) {
         const newPath = result[0];
         onChange(newPath);
         // Aggiungi la nuova versione alla lista se non è già presente
-        if (!availableVersions.some(v => v.path === newPath)) {
-          setAvailableVersions(prev => [...prev, { path: newPath, version: 'Custom' }]);
+        if (!availableVersions.some((v) => v.path === newPath)) {
+          setAvailableVersions((prev) => [
+            ...prev,
+            { path: newPath, version: "Custom" },
+          ]);
         }
         toast.success("Blender path set", {
           description: `Selected Blender at: ${newPath}`,
@@ -103,7 +118,7 @@ const BlenderPathSelector: React.FC<BlenderPathSelectorProps> = ({ value = '', o
         </Select>
       ) : (
         <Input
-          value={value || ''}
+          value={value || ""}
           readOnly
           placeholder="Select Blender executable"
           className="w-[300px]"
@@ -112,7 +127,7 @@ const BlenderPathSelector: React.FC<BlenderPathSelectorProps> = ({ value = '', o
       <Button
         variant="outline"
         size="icon"
-        onClick={detectBlender}
+        onClick={() => detectBlender(true)}
         disabled={isDetecting}
         title="Auto-detect Blender"
       >

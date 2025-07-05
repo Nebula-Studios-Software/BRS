@@ -28,7 +28,6 @@ class RenderService {
 
   public async startRender(command: string, options: RenderOptions = {}): Promise<void> {
     if (this.isRendering) {
-      toast.error('Un rendering è già in corso');
       return;
     }
 
@@ -36,6 +35,9 @@ class RenderService {
       this.isRendering = true;
       const { id } = await window.electronAPI.executeCommand(command);
       this.currentProcessId = id;
+
+      // Pulisce i listener precedenti per questo processo
+      this.cleanupListeners(id);
 
       // Ascolta gli eventi di progresso
       window.electronAPI.on<ProgressEventData>(`progress-${id}`, (data) => {
@@ -51,14 +53,13 @@ class RenderService {
       window.electronAPI.on<number>(`complete-${id}`, (code) => {
         this.isRendering = false;
         this.currentProcessId = null;
+        this.cleanupListeners(id);
         if (code === 0) {
-          toast.success('Rendering completato con successo');
           if (options.onComplete) {
             options.onComplete();
           }
         } else {
           const error = `Rendering completato con codice di errore: ${code}`;
-          toast.error(error);
           if (options.onError) {
             options.onError(error);
           }
@@ -69,7 +70,7 @@ class RenderService {
       window.electronAPI.on<string>(`error-${id}`, (error) => {
         this.isRendering = false;
         this.currentProcessId = null;
-        toast.error(`Errore durante il rendering: ${error}`);
+        this.cleanupListeners(id);
         if (options.onError) {
           options.onError(error);
         }
@@ -77,7 +78,6 @@ class RenderService {
     } catch (error) {
       this.isRendering = false;
       this.currentProcessId = null;
-      toast.error('Errore durante l\'avvio del rendering');
       if (options.onError) {
         options.onError(error instanceof Error ? error.message : 'Errore sconosciuto');
       }
@@ -86,7 +86,6 @@ class RenderService {
 
   public async stopRender(): Promise<void> {
     if (!this.currentProcessId) {
-      toast.error('Nessun rendering in corso');
       return;
     }
 
@@ -94,14 +93,20 @@ class RenderService {
       await window.electronAPI.stopProcess(this.currentProcessId);
       this.isRendering = false;
       this.currentProcessId = null;
-      toast.success('Rendering interrotto');
     } catch (error) {
-      toast.error('Errore durante l\'interruzione del rendering');
+      // Error will be handled by the caller
+      throw error;
     }
   }
 
   public isCurrentlyRendering(): boolean {
     return this.isRendering;
+  }
+
+  private cleanupListeners(processId: string): void {
+    window.electronAPI.removeAllListeners(`progress-${processId}`);
+    window.electronAPI.removeAllListeners(`complete-${processId}`);
+    window.electronAPI.removeAllListeners(`error-${processId}`);
   }
 }
 

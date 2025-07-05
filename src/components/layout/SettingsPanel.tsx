@@ -1,33 +1,49 @@
-import React, { useState, useEffect } from 'react';
-import { Card } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
-import { renderParameters, getParametersByCategory } from '@/config/renderParameters';
-import { ScrollArea } from '../ui/scroll-area';
-import { FolderOpen, ChevronDown, ChevronRight } from 'lucide-react';
-import { toast } from 'sonner';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect } from "react";
+import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import {
+  renderParameters,
+  getParametersByCategory,
+} from "@/config/renderParameters";
+import { ScrollArea } from "../ui/scroll-area";
+import { FolderOpen, ChevronDown, ChevronRight } from "lucide-react";
+import { toast } from "sonner";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface SettingsPanelProps {
   currentSettings: Record<string, any>;
   onSettingsChange: (settings: Record<string, any>) => void;
 }
 
-const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettingsChange }) => {
+const SettingsPanel: React.FC<SettingsPanelProps> = ({
+  currentSettings,
+  onSettingsChange,
+}) => {
   const [values, setValues] = useState<Record<string, any>>({});
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    new Set()
+  );
 
   useEffect(() => {
     setValues(currentSettings);
     // Espandi automaticamente le categorie che sono abilitate
     const enabledCategories = new Set(
       renderParameters.categories
-        .filter(cat => cat.id === 'base' || currentSettings[`${cat.id}_enabled`])
-        .map(cat => cat.id)
+        .filter(
+          (cat) => cat.id === "base" || currentSettings[`${cat.id}_enabled`]
+        )
+        .map((cat) => cat.id)
     );
     setExpandedCategories(enabledCategories);
   }, [currentSettings]);
@@ -38,12 +54,15 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
     onSettingsChange(newValues);
   };
 
-  const handleFileSelect = async (parameterId: string, type: 'file' | 'path') => {
+  const handleFileSelect = async (
+    parameterId: string,
+    type: "file" | "path"
+  ) => {
     try {
       let result;
-      if (type === 'file') {
+      if (type === "file") {
         result = await window.electronAPI.openFileDialog({
-          filters: [{ name: 'Blend Files', extensions: ['blend'] }]
+          filters: [{ name: "Blend Files", extensions: ["blend"] }],
         });
         if (result && result.length > 0) {
           handleValueChange(parameterId, result[0]);
@@ -53,8 +72,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
         }
       } else {
         result = await window.electronAPI.openFileDialog({
-          properties: ['openDirectory'],
-          filters: [{ name: 'All Files', extensions: ['*'] }]
+          properties: ["openDirectory"],
+          filters: [{ name: "All Files", extensions: ["*"] }],
         });
         if (result && result.length > 0) {
           handleValueChange(parameterId, result[0]);
@@ -72,12 +91,15 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
 
   const handleSectionToggle = (categoryId: string, enabled: boolean) => {
     // Non permettere di disabilitare la categoria base
-    if (categoryId === 'base') return;
+    if (categoryId === "base") return;
 
-    const newSettings = { ...currentSettings, [`${categoryId}_enabled`]: enabled };
+    const newSettings = {
+      ...currentSettings,
+      [`${categoryId}_enabled`]: enabled,
+    };
     onSettingsChange(newSettings);
     // Aggiorna lo stato di espansione
-    setExpandedCategories(prev => {
+    setExpandedCategories((prev) => {
       const newSet = new Set(prev);
       if (enabled) {
         newSet.add(categoryId);
@@ -89,7 +111,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
   };
 
   const toggleCategory = (categoryId: string) => {
-    setExpandedCategories(prev => {
+    setExpandedCategories((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(categoryId)) {
         newSet.delete(categoryId);
@@ -102,7 +124,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
 
   const handleCategoryClick = (categoryId: string) => {
     // Non permettere di chiudere la categoria base
-    if (categoryId === 'base') return;
+    if (categoryId === "base") return;
 
     if (currentSettings[`${categoryId}_enabled`]) {
       toggleCategory(categoryId);
@@ -110,27 +132,32 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
   };
 
   const renderParameterField = (parameter: any) => {
-    const value = values[parameter.id] ?? parameter.defaultValue ?? '';
+    const value = values[parameter.id] ?? parameter.defaultValue ?? "";
     const isRequired = parameter.required;
 
     switch (parameter.type) {
-      case 'string':
+      case "string":
         return (
           <Input
             value={value}
             onChange={(e) => handleValueChange(parameter.id, e.target.value)}
-            placeholder={parameter.placeholder || ''}
+            placeholder={parameter.placeholder || ""}
             required={isRequired}
           />
         );
 
-      case 'number':
+      case "number":
         return (
           <Input
             type="number"
-            value={value || ''}
-            onChange={(e) => handleValueChange(parameter.id, e.target.value === '' ? undefined : parseInt(e.target.value))}
-            placeholder={parameter.placeholder || ''}
+            value={value || ""}
+            onChange={(e) =>
+              handleValueChange(
+                parameter.id,
+                e.target.value === "" ? undefined : parseInt(e.target.value)
+              )
+            }
+            placeholder={parameter.placeholder || ""}
             min={parameter.min}
             max={parameter.max}
             step={parameter.step}
@@ -138,15 +165,17 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
           />
         );
 
-      case 'boolean':
+      case "boolean":
         return (
           <Switch
             checked={value}
-            onCheckedChange={(checked) => handleValueChange(parameter.id, checked)}
+            onCheckedChange={(checked) =>
+              handleValueChange(parameter.id, checked)
+            }
           />
         );
 
-      case 'enum':
+      case "enum":
         return (
           <Select
             value={value}
@@ -154,7 +183,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
             required={isRequired}
           >
             <SelectTrigger>
-              <SelectValue placeholder={parameter.placeholder || 'Select option'} />
+              <SelectValue
+                placeholder={parameter.placeholder || "Select option"}
+              />
             </SelectTrigger>
             <SelectContent>
               {parameter.options?.map((option: string) => (
@@ -166,31 +197,31 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
           </Select>
         );
 
-      case 'file':
+      case "file":
         return (
           <div className="flex gap-2">
             <Input
               value={value}
               readOnly
-              placeholder={parameter.placeholder || 'Select file'}
+              placeholder={parameter.placeholder || "Select file"}
               required={isRequired}
             />
-            <Button onClick={() => handleFileSelect(parameter.id, 'file')}>
+            <Button onClick={() => handleFileSelect(parameter.id, "file")}>
               <FolderOpen className="h-4 w-4" />
             </Button>
           </div>
         );
 
-      case 'path':
+      case "path":
         return (
           <div className="flex gap-2">
             <Input
               value={value}
               readOnly
-              placeholder={parameter.placeholder || 'Select directory'}
+              placeholder={parameter.placeholder || "Select directory"}
               required={isRequired}
             />
-            <Button onClick={() => handleFileSelect(parameter.id, 'path')}>
+            <Button onClick={() => handleFileSelect(parameter.id, "path")}>
               <FolderOpen className="h-4 w-4" />
             </Button>
           </div>
@@ -206,12 +237,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
       <h2 className="text-xl font-bold">Render Settings</h2>
       <Separator className="my-2" />
 
-      <ScrollArea className='h-full pe-4'>
+      <ScrollArea className="h-full pe-4">
         {renderParameters.categories.map((category) => {
           const parameters = getParametersByCategory(category.id);
           if (parameters.length === 0) return null;
 
-          const isEnabled = category.id === 'base' || currentSettings[`${category.id}_enabled`];
+          const isEnabled =
+            category.id === "base" || currentSettings[`${category.id}_enabled`];
           const isExpanded = expandedCategories.has(category.id);
 
           return (
@@ -233,8 +265,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
                 </Button>
                 <Switch
                   checked={isEnabled}
-                  disabled={category.id === 'base'}
-                  onCheckedChange={(checked) => handleSectionToggle(category.id, checked)}
+                  disabled={category.id === "base"}
+                  onCheckedChange={(checked) =>
+                    handleSectionToggle(category.id, checked)
+                  }
                 />
               </div>
               <AnimatePresence>
@@ -256,11 +290,15 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
                         >
                           <Label className="mb-4">
                             {parameter.name}
-                            {parameter.required && <span className="text-red-500">*</span>}
+                            {parameter.required && (
+                              <span className="text-red-500">*</span>
+                            )}
                           </Label>
                           {renderParameterField(parameter)}
                           {parameter.help && (
-                            <p className="text-sm text-muted-foreground mt-1">{parameter.help}</p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {parameter.help}
+                            </p>
                           )}
                         </motion.div>
                       ))}
@@ -272,7 +310,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentSettings, onSettin
             </div>
           );
         })}
-        <div className='h-10'></div>
+        <div className="h-10"></div>
       </ScrollArea>
     </Card>
   );

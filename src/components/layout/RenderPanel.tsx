@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,12 @@ import {
   Thermometer,
   Zap,
   Clock,
+  User,
+  MemoryStick,
+  HardDrive,
+  Terminal,
+  AlertTriangle,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueueStore } from "@/store/queueStore";
@@ -45,6 +51,8 @@ interface RenderPanelProps {
   command: string;
   logs: LogEntry[];
   onAddLog: (message: string, level?: LogLevel) => void;
+  onToggleLogPanel: () => void;
+  isLogPanelVisible: boolean;
 }
 
 interface ProgressEventData {
@@ -88,6 +96,8 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
   command,
   logs,
   onAddLog,
+  onToggleLogPanel,
+  isLogPanelVisible,
 }) => {
   const [isRendering, setIsRendering] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -108,6 +118,7 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
   const addHistoryItem = useHistoryStore((state) => state.addItem);
   const [historyOpen, setHistoryOpen] = useState(false);
   const items = useHistoryStore((state) => state.items);
+  const renderStartTimeRef = useRef<Date | null>(null);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -144,6 +155,14 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
       setSystemStats(stats);
     });
 
+    // Debug: Log command for parameter extraction
+    if (command) {
+      console.log(
+        "🔍 Command available for parameter extraction:",
+        command.substring(0, 100) + "..."
+      );
+    }
+
     // Cleanup on unmount
     return () => {
       window.electronAPI.stopSystemMonitor();
@@ -151,43 +170,87 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
   }, []);
 
   const extractParametersFromCommand = (command: string) => {
-    // Estrai il percorso di Blender
-    const blenderPath = command.split(" ")[0];
+    // Estrai il percorso di Blender (prima parte del comando)
+    const blenderPath = command.split(" -b")[0].replace(/"/g, "");
 
     // Estrai la versione di Blender dal percorso
     let blenderVersion = "Unknown";
     if (blenderPath.includes("Blender Foundation")) {
       const versionMatch = blenderPath.match(
-        /Blender Foundation\\Blender ([\d.]+)/
+        /Blender Foundation[\\/]Blender ([\d.]+)/
       );
       if (versionMatch) {
         blenderVersion = versionMatch[1];
       }
-    } else if (blenderPath.includes("Programs\\Blender")) {
-      const versionMatch = blenderPath.match(/Programs\\Blender\\([\d.]+)/);
+    } else if (blenderPath.includes("Programs")) {
+      const versionMatch = blenderPath.match(
+        /Programs[\\/]Blender[\\/]([\d.]+)/
+      );
+      if (versionMatch) {
+        blenderVersion = versionMatch[1];
+      }
+    } else if (blenderPath.includes("blender")) {
+      // Prova a estrarre la versione dal nome del file
+      const versionMatch = blenderPath.match(/blender[^\\/]*?([\d.]+)/i);
       if (versionMatch) {
         blenderVersion = versionMatch[1];
       }
     }
 
-    // Estrai il percorso di output
-    const outputPath = command.match(/-o\s+"?([^"\s]+)"?/)?.[1] || "";
+    // Estrai il percorso di output (dopo -o)
+    const outputMatch = command.match(/-o\s+"([^"]+)"/);
+    let outputPath = "";
+    if (outputMatch) {
+      outputPath = outputMatch[1];
+      // Rimuovi il nome del file per ottenere solo la directory
+      outputPath = outputPath.split("/").slice(0, -1).join("/");
+    }
 
-    // Estrai il motore di rendering
+    // Estrai il motore di rendering (dopo -E)
     let renderEngine = "Unknown";
-    if (command.includes("-E CYCLES")) {
-      renderEngine = "Cycles";
-    } else if (command.includes("-E BLENDER_EEVEE")) {
-      renderEngine = "Eevee";
-    } else if (command.includes("-E BLENDER_WORKBENCH")) {
-      renderEngine = "Workbench";
+    const engineMatch = command.match(/-E\s+(\w+)/);
+    if (engineMatch) {
+      const engine = engineMatch[1];
+      switch (engine) {
+        case "CYCLES":
+          renderEngine = "Cycles";
+          break;
+        case "BLENDER_EEVEE":
+          renderEngine = "Eevee";
+          break;
+        case "BLENDER_WORKBENCH":
+          renderEngine = "Workbench";
+          break;
+        default:
+          renderEngine = engine;
+      }
     }
 
     // Estrai i frame dal comando
-    const frameMatch = command.match(/-f\s+(\d+)\s+(\d+)/);
-    const totalFrames = frameMatch
-      ? parseInt(frameMatch[2]) - parseInt(frameMatch[1]) + 1
-      : 0;
+    let totalFrames = 0;
+
+    // Controlla se è un'animazione (con -a)
+    if (command.includes(" -a")) {
+      const startMatch = command.match(/-s\s+(\d+)/);
+      const endMatch = command.match(/-e\s+(\d+)/);
+      if (startMatch && endMatch) {
+        const start = parseInt(startMatch[1]);
+        const end = parseInt(endMatch[1]);
+        totalFrames = end - start + 1;
+      }
+    }
+    // Controlla se è un frame singolo (con -f)
+    else if (command.includes(" -f ")) {
+      totalFrames = 1;
+    }
+
+    console.log("📊 Extracted parameters from command:", {
+      blenderVersion,
+      renderEngine,
+      outputPath,
+      totalFrames,
+      command: command.substring(0, 100) + "...",
+    });
 
     return {
       blenderVersion,
@@ -195,6 +258,59 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
       outputPath,
       totalFrames,
       lastUsed: new Date().toISOString(),
+    };
+  };
+
+  const createHistoryItem = async (
+    status: "completed" | "failed" | "stopped",
+    error?: string,
+    renderStartTime?: Date | null
+  ): Promise<Omit<HistoryItem, "id">> => {
+    const now = new Date();
+    const actualStartTime = renderStartTime || now;
+    const duration = Math.floor(
+      (now.getTime() - actualStartTime.getTime()) / 1000
+    );
+
+    // Usa l'estrazione dal comando invece degli handler IPC
+    const parameters = extractParametersFromCommand(command);
+
+    // Calcola i frame finali usando i valori rilevati o quelli estratti dal comando
+    const finalTotalFrames = totalFrames || parameters.totalFrames;
+    const finalCurrentFrame =
+      status === "completed" ? finalTotalFrames : currentFrame;
+
+    console.log("📊 History item data:", {
+      duration,
+      actualStartTime: actualStartTime.toISOString(),
+      endTime: now.toISOString(),
+      blenderVersion: parameters.blenderVersion,
+      renderEngine: parameters.renderEngine,
+      totalFrames: finalTotalFrames,
+      currentFrame: finalCurrentFrame,
+      status,
+    });
+
+    return {
+      name: command.split("/").pop() || "Render",
+      command: command,
+      status,
+      startTime: actualStartTime.toISOString(),
+      endTime: now.toISOString(),
+      duration,
+      progress: status === "completed" ? 100 : progress,
+      currentFrame: finalCurrentFrame,
+      totalFrames: finalTotalFrames,
+      currentSample: status === "completed" ? totalSamples : currentSample,
+      totalSamples: totalSamples,
+      error: error,
+      parameters: {
+        blenderVersion: parameters.blenderVersion,
+        renderEngine: parameters.renderEngine,
+        outputPath: parameters.outputPath,
+        totalFrames: finalTotalFrames,
+        lastUsed: now.toISOString(),
+      },
     };
   };
 
@@ -206,11 +322,15 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
       return;
     }
 
+    // Salva il timestamp di inizio in una variabile locale
+    const renderStartTime = new Date();
+    renderStartTimeRef.current = renderStartTime;
+
     setIsRendering(true);
     setProgress(0);
     setCurrentFrame(0);
     setTotalFrames(0);
-    setStartTime(new Date());
+    setStartTime(renderStartTime);
     setMemoryUsage(0);
     setPeakMemory(0);
     setCurrentSample(0);
@@ -295,7 +415,12 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
       );
 
       // Ascolta l'evento di completamento
-      window.electronAPI.on(`complete-${id}`, (code: number) => {
+      window.electronAPI.on(`complete-${id}`, async (code: number) => {
+        // Pulisce i listener una volta completato
+        window.electronAPI.removeAllListeners(`progress-${id}`);
+        window.electronAPI.removeAllListeners(`complete-${id}`);
+        window.electronAPI.removeAllListeners(`error-${id}`);
+
         if (code === 0) {
           setIsRendering(false);
           setStartTime(null);
@@ -304,25 +429,12 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
             description: "The render has completed successfully.",
           });
 
-          // Aggiungi alla cronologia
-          const historyItem: Omit<HistoryItem, "id"> = {
-            name: command.split("/").pop() || "Render",
-            command: command,
-            status: "completed" as const,
-            startTime: startTime?.toISOString() || new Date().toISOString(),
-            endTime: new Date().toISOString(),
-            duration: Math.floor(
-              (new Date().getTime() -
-                (startTime?.getTime() || new Date().getTime())) /
-                1000
-            ),
-            progress: 100,
-            currentFrame: totalFrames,
-            totalFrames: totalFrames,
-            currentSample: totalSamples,
-            totalSamples: totalSamples,
-            parameters: extractParametersFromCommand(command),
-          };
+          // Aggiungi alla cronologia - usa la variabile locale renderStartTime
+          const historyItem = await createHistoryItem(
+            "completed",
+            undefined,
+            renderStartTime
+          );
           addHistoryItem(historyItem);
         } else {
           addLog(`Render failed with code ${code}`, "error");
@@ -330,40 +442,39 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
             description: `The render failed with code ${code}.`,
           });
 
-          // Aggiungi alla cronologia come fallito
-          const historyItem: Omit<HistoryItem, "id"> = {
-            name: command.split("/").pop() || "Render",
-            command: command,
-            status: "failed" as const,
-            startTime: startTime?.toISOString() || new Date().toISOString(),
-            endTime: new Date().toISOString(),
-            duration: Math.floor(
-              (new Date().getTime() -
-                (startTime?.getTime() || new Date().getTime())) /
-                1000
-            ),
-            progress: progress,
-            currentFrame: currentFrame,
-            totalFrames: totalFrames,
-            currentSample: currentSample,
-            totalSamples: totalSamples,
-            error: `Render failed with code ${code}`,
-            parameters: extractParametersFromCommand(command),
-          };
+          // Aggiungi alla cronologia come fallito - usa la variabile locale renderStartTime
+          const historyItem = await createHistoryItem(
+            "failed",
+            `Render failed with code ${code}`,
+            renderStartTime
+          );
           addHistoryItem(historyItem);
         }
       });
 
       // Ascolta gli eventi di errore
-      window.electronAPI.on(`error-${id}`, (error: string) => {
+      window.electronAPI.on(`error-${id}`, async (error: string) => {
         // Non fermare il rendering se l'errore non è critico
         if (error.includes("Failed to start the render process")) {
+          // Pulisce i listener in caso di errore critico
+          window.electronAPI.removeAllListeners(`progress-${id}`);
+          window.electronAPI.removeAllListeners(`complete-${id}`);
+          window.electronAPI.removeAllListeners(`error-${id}`);
+
           setIsRendering(false);
           setStartTime(null);
           addLog(error, "error");
           toast.error("Render Error", {
             description: error,
           });
+
+          // Aggiungi alla cronologia come fallito - usa la variabile locale renderStartTime
+          const historyItem = await createHistoryItem(
+            "failed",
+            error,
+            renderStartTime
+          );
+          addHistoryItem(historyItem);
         } else {
           addLog(error, "warning");
         }
@@ -376,6 +487,14 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
       toast.error("Error", {
         description: "Failed to start the render process.",
       });
+
+      // Aggiungi alla cronologia come fallito - usa la variabile locale renderStartTime
+      const historyItem = await createHistoryItem(
+        "failed",
+        "Failed to start the render process",
+        renderStartTime
+      );
+      addHistoryItem(historyItem);
     }
   };
 
@@ -383,6 +502,14 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
     if (currentProcessId) {
       try {
         await window.electronAPI.stopProcess(currentProcessId);
+
+        // Pulisce i listener quando il render viene fermato
+        window.electronAPI.removeAllListeners(`progress-${currentProcessId}`);
+        window.electronAPI.removeAllListeners(`complete-${currentProcessId}`);
+        window.electronAPI.removeAllListeners(`error-${currentProcessId}`);
+
+        // Usa il renderStartTime dal ref
+        const renderStartTime = renderStartTimeRef.current;
         setIsRendering(false);
         setStartTime(null);
         addLog("Render stopped by user", "warning");
@@ -391,24 +518,11 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
         });
 
         // Aggiungi alla cronologia come interrotto
-        const historyItem: Omit<HistoryItem, "id"> = {
-          name: command.split("/").pop() || "Render",
-          command: command,
-          status: "stopped" as const,
-          startTime: startTime?.toISOString() || new Date().toISOString(),
-          endTime: new Date().toISOString(),
-          duration: Math.floor(
-            (new Date().getTime() -
-              (startTime?.getTime() || new Date().getTime())) /
-              1000
-          ),
-          progress: progress,
-          currentFrame: currentFrame,
-          totalFrames: totalFrames,
-          currentSample: currentSample,
-          totalSamples: totalSamples,
-          parameters: extractParametersFromCommand(command),
-        };
+        const historyItem = await createHistoryItem(
+          "stopped",
+          undefined,
+          renderStartTime
+        );
         addHistoryItem(historyItem);
       } catch (error) {
         console.error("Error stopping render:", error);
@@ -473,10 +587,89 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
       <div className="flex-none">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Frame className="h-5 w-5" />
-              Render Controls
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Frame className="h-5 w-5" />
+                Render Controls
+              </CardTitle>
+              <Button
+                onClick={onToggleLogPanel}
+                variant={
+                  logs.filter(
+                    (log) => log.level === "error" || log.level === "fatal"
+                  ).length > 0
+                    ? "destructive"
+                    : logs.filter((log) => log.level === "warning").length > 0
+                    ? "secondary"
+                    : "outline"
+                }
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <div className="flex items-center gap-2">
+                  {logs.filter(
+                    (log) => log.level === "error" || log.level === "fatal"
+                  ).length > 0 ? (
+                    <AlertCircle className="h-4 w-4" />
+                  ) : logs.filter((log) => log.level === "warning").length >
+                    0 ? (
+                    <AlertTriangle className="h-4 w-4" />
+                  ) : (
+                    <Terminal className="h-4 w-4" />
+                  )}
+                  <span className="text-sm">
+                    {logs.filter(
+                      (log) => log.level === "error" || log.level === "fatal"
+                    ).length > 0
+                      ? "Errors"
+                      : logs.filter((log) => log.level === "warning").length > 0
+                      ? "Warnings"
+                      : "Logs"}
+                  </span>
+                </div>
+
+                {logs.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    {logs.filter(
+                      (log) => log.level === "error" || log.level === "fatal"
+                    ).length > 0 && (
+                      <Badge
+                        variant="secondary"
+                        className="h-5 px-1.5 text-xs bg-red-500/20 text-red-400"
+                      >
+                        {
+                          logs.filter(
+                            (log) =>
+                              log.level === "error" || log.level === "fatal"
+                          ).length
+                        }
+                      </Badge>
+                    )}
+                    {logs.filter((log) => log.level === "warning").length >
+                      0 && (
+                      <Badge
+                        variant="secondary"
+                        className="h-5 px-1.5 text-xs bg-yellow-500/20 text-yellow-400"
+                      >
+                        {logs.filter((log) => log.level === "warning").length}
+                      </Badge>
+                    )}
+                    {logs.filter(
+                      (log) => log.level === "error" || log.level === "fatal"
+                    ).length === 0 &&
+                      logs.filter((log) => log.level === "warning").length ===
+                        0 && (
+                        <Badge
+                          variant="secondary"
+                          className="h-5 px-1.5 text-xs"
+                        >
+                          {logs.length}
+                        </Badge>
+                      )}
+                  </div>
+                )}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -768,13 +961,14 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
                 <div className="space-y-4">
                   <h3 className="text-sm font-medium flex items-center gap-2">
                     <Monitor className="h-4 w-4" />
-                    GPU Information
+                    GPU Information ({systemStats.gpu.length} discrete GPU
+                    {systemStats.gpu.length !== 1 ? "s" : ""})
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-4">
                     {systemStats.gpu.map((gpu, index) => (
                       <div
                         key={index}
-                        className="bg-background rounded-md p-4 space-y-3"
+                        className="bg-background rounded-md p-4 space-y-4"
                       >
                         <div
                           className="font-medium text-sm truncate"
@@ -783,33 +977,35 @@ const RenderPanel: React.FC<RenderPanelProps> = ({
                           {gpu.name}
                         </div>
 
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-xs">
-                            <span>GPU Usage:</span>
-                            <span>{gpu.usage}</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-xs">
+                              <span>GPU Usage:</span>
+                              <span>{gpu.usage}</span>
+                            </div>
+                            <Progress
+                              value={parseFloat(gpu.usage)}
+                              className="h-2"
+                              variant="success"
+                            />
                           </div>
-                          <Progress
-                            value={parseFloat(gpu.usage)}
-                            className="h-1.5"
-                            variant="success"
-                          />
+
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-xs">
+                              <span>VRAM:</span>
+                              <span>
+                                {gpu.memory.used} / {gpu.memory.total}
+                              </span>
+                            </div>
+                            <Progress
+                              value={parseFloat(gpu.memory.percentage)}
+                              className="h-2"
+                              variant="warning"
+                            />
+                          </div>
                         </div>
 
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-xs">
-                            <span>VRAM:</span>
-                            <span>
-                              {gpu.memory.used} / {gpu.memory.total}
-                            </span>
-                          </div>
-                          <Progress
-                            value={parseFloat(gpu.memory.percentage)}
-                            className="h-1.5"
-                            variant="warning"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                           <div className="flex items-center gap-1">
                             <Thermometer className="h-3 w-3" />
                             <span>{gpu.temperature}</span>

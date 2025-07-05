@@ -59,7 +59,15 @@ class RenderManager extends EventEmitter {
   getFrameRange(command) {
     const frameStartMatch = command.match(/-s\s+(\d+)/);
     const frameEndMatch = command.match(/-e\s+(\d+)/);
+    const singleFrameMatch = command.match(/-f\s+(\d+)/);
 
+    // Se c'è un singolo frame specificato con -f
+    if (singleFrameMatch) {
+      const frameNum = parseInt(singleFrameMatch[1]);
+      return { start: frameNum, end: frameNum };
+    }
+
+    // Se non ci sono parametri -s e -e, default a frame 1
     if (!frameStartMatch || !frameEndMatch) {
       return { start: 1, end: 1 };
     }
@@ -167,7 +175,17 @@ class RenderManager extends EventEmitter {
           const frameMatch = output.match(/Fra:(\d+)/);
           if (frameMatch) {
             currentFrame = parseInt(frameMatch[1]);
-            const progress = ((currentFrame - start) / (end - start)) * 100;
+            
+            // Calcola il progresso gestendo il caso di singolo frame
+            let progress;
+            if (start === end) {
+              // Singolo frame: progresso basato sul completamento del frame
+              progress = currentFrame >= start ? 100 : 0;
+            } else {
+              // Animazione: progresso normale
+              progress = ((currentFrame - start) / (end - start)) * 100;
+            }
+            
             if (sender && sender.send) {
               sender.send(`progress-${processId}`, {
                 currentFrame,

@@ -152,6 +152,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadHistory: () => ipcRenderer.invoke('load-history'),
   confirmCloseApp: () => ipcRenderer.invoke('confirm-close-app'),
   
+  // Blender info handlers
+  getBlenderVersion: () => ipcRenderer.invoke('get-blender-version'),
+  getRenderEngine: () => ipcRenderer.invoke('get-render-engine'),
+  getOutputPath: () => ipcRenderer.invoke('get-output-path'),
+  
   // Mobile Companion Server APIs
   mobileServerStart: () => ipcRenderer.invoke('mobile-server-start'),
   mobileServerStop: () => ipcRenderer.invoke('mobile-server-stop'),

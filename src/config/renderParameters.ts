@@ -162,45 +162,45 @@ export const renderParameters = {
     },
 
     // Resolution Settings
-    {
-      id: 'resolution_x',
-      name: 'Width',
-      description: 'Rendered image width in pixels',
-      type: 'number',
-      category: 'resolution',
-      priority: 1,
-      min: 1,
-      max: 16384,
-      step: 1,
-      defaultValue: 1920,
-      help: 'Set the output image width'
-    },
-    {
-      id: 'resolution_y',
-      name: 'Height',
-      description: 'Rendered image height in pixels',
-      type: 'number',
-      category: 'resolution',
-      priority: 2,
-      min: 1,
-      max: 16384,
-      step: 1,
-      defaultValue: 1080,
-      help: 'Set the output image height'
-    },
-    {
-      id: 'resolution_percentage',
-      name: 'Resolution %',
-      description: 'Resolution percentage (1-100)',
-      type: 'number',
-      category: 'resolution',
-      priority: 3,
-      min: 1,
-      max: 100,
-      step: 1,
-      defaultValue: 100,
-      help: 'Set the resolution percentage'
-    },
+    // {
+    //   id: 'resolution_x',
+    //   name: 'Width',
+    //   description: 'Rendered image width in pixels',
+    //   type: 'number',
+    //   category: 'resolution',
+    //   priority: 1,
+    //   min: 1,
+    //   max: 16384,
+    //   step: 1,
+    //   defaultValue: 1920,
+    //   help: 'Set the output image width'
+    // },
+    // {
+    //   id: 'resolution_y',
+    //   name: 'Height',
+    //   description: 'Rendered image height in pixels',
+    //   type: 'number',
+    //   category: 'resolution',
+    //   priority: 2,
+    //   min: 1,
+    //   max: 16384,
+    //   step: 1,
+    //   defaultValue: 1080,
+    //   help: 'Set the output image height'
+    // },
+    // {
+    //   id: 'resolution_percentage',
+    //   name: 'Resolution %',
+    //   description: 'Resolution percentage (1-100)',
+    //   type: 'number',
+    //   category: 'resolution',
+    //   priority: 3,
+    //   min: 1,
+    //   max: 100,
+    //   step: 1,
+    //   defaultValue: 100,
+    //   help: 'Set the resolution percentage'
+    // },
 
     // Frame Settings
     {
@@ -256,34 +256,34 @@ export const renderParameters = {
     },
 
     // Cycles Settings
-    {
-      id: 'cycles_samples',
-      name: 'Samples',
-      description: 'Number of samples for rendering',
-      type: 'number',
-      category: 'cycles',
-      priority: 1,
-      min: 1,
-      defaultValue: 128,
-      help: 'Set the number of render samples',
-      dependencies: [
-        {
-          parameter: 'render_engine',
-          condition: 'CYCLES'
-        }
-      ]
-    },
-    {
-      id: 'threads',
-      name: 'Threads',
-      description: 'Number of threads for rendering (0=auto)',
-      type: 'number',
-      category: 'cycles',
-      priority: 2,
-      min: 0,
-      defaultValue: 0,
-      help: 'Set the number of rendering threads (0 for automatic)'
-    }
+    // {
+    //   id: 'cycles_samples',
+    //   name: 'Samples',
+    //   description: 'Number of samples for rendering',
+    //   type: 'number',
+    //   category: 'cycles',
+    //   priority: 1,
+    //   min: 1,
+    //   defaultValue: 128,
+    //   help: 'Set the number of render samples',
+    //   dependencies: [
+    //     {
+    //       parameter: 'render_engine',
+    //       condition: 'CYCLES'
+    //     }
+    //   ]
+    // },
+    // {
+    //   id: 'threads',
+    //   name: 'Threads',
+    //   description: 'Number of threads for rendering (0=auto)',
+    //   type: 'number',
+    //   category: 'cycles',
+    //   priority: 2,
+    //   min: 0,
+    //   defaultValue: 0,
+    //   help: 'Set the number of rendering threads (0 for automatic)'
+    // }
   ]
 };
 
